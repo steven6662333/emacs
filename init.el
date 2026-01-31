@@ -55,20 +55,14 @@
   (find-file "~/.emacs.d/init.el"))
 (global-set-key (kbd "C-,") 'open-init-file)
 
-;; Repos
+;; Packages
 (require 'package)
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 (package-initialize)
 
-;; Packages
+;; Keybindings
 
-
-(use-package key-chord
-  :ensure t
-  :config
-  (setq key-chord-two-keys-delay 0.3)
-  (key-chord-mode 1))
-
+; Preparations
 (defun eval-smart ()
   "Smart evaluation: eval selected region if active, else eval whole buffer.
 Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects."
@@ -81,7 +75,6 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
 	)
     ;; 无选中区域：执行整个缓冲区的代码
     (eval-buffer)))  ; 求值整个缓冲区
-
 (defun delete-whitespace-before-point (&optional arg)
   "删除光标前所有空白字符，直到第一个非空白字符。
 删除后如果光标不在行首，则保留**原有的一个空白字符**（而非统一空格）。
@@ -114,7 +107,6 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
                  (not (bolp))                     ; 光标也不是行首位置
                  original-whitespace)	 ; 存在可保留的原始空白字符
         (insert original-whitespace))))) ; 插入原始空白字符（而非空格）
-
 (defconst skip-chars '(?_ ?-))
 (defun init/evil-forward-word-begin-skip ()
   (interactive)
@@ -129,9 +121,13 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
     (if (memq char skip-chars)
 	(evil-backward-char))))
 
+(use-package general
+  :ensure t
+  :config
+  (general-evil-setup))
 (use-package evil
   :ensure t
-  :after key-chord
+  :after general
   :init
   (setq evil-want-integration t) ;; This is optional since it's already set to t by default.
   (setq evil-want-keybinding nil)
@@ -141,7 +137,6 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   (evil-mode 1)
   (setq evil-emacs-state-modes (delq 'ibuffer-mode evil-emacs-state-modes))
   ; Keybinds for evil
-  (key-chord-define evil-insert-state-map "jj" 'evil-normal-state)
   (with-eval-after-load 'evil-maps ; Remove evil's keymap for specific keys
     (define-key evil-normal-state-map (kbd "s") nil)
     (define-key evil-normal-state-map (kbd "q") nil)
@@ -149,68 +144,89 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
     (define-key evil-motion-state-map (kbd "SPC") nil)
     (define-key evil-motion-state-map (kbd "RET") nil)
     (define-key evil-motion-state-map (kbd "TAB") nil))
-  (evil-define-key '(normal visual operator) 'global
-    "0" 'back-to-indentation
-    "L" 'move-end-of-line
-    "H" 'back-to-indentation)
-  (evil-define-key 'insert 'global
-    (kbd "M-w") 'init/evil-forward-word-begin-skip
-    (kbd "M-b") 'init/evil-backward-word-begin-skip
-    (kbd "M-l") 'evil-forward-char
-    (kbd "M-h") 'evil-backward-char
-    (kbd "M-j") 'evil-next-visual-line
-    (kbd "M-k") 'evil-previous-visual-line)
-  (evil-define-key '(normal motion) 'global
-    (kbd "C-q") 'evil-visual-block
-
-    "w" 'init/evil-forward-word-begin-skip
-    "b" 'init/evil-backward-word-begin-skip
-    "j" 'evil-next-visual-line
-    "k" 'evil-previous-visual-line
-
-    "K" 'scroll-down
-    "J" 'scroll-up
-    (kbd "M-j") 'scroll-other-window
-    (kbd "M-k") 'scroll-other-window-down
-
-    (kbd "S-<backspace>") 'delete-whitespace-before-point
-    (kbd "C-/") 'comment-dwim
-
-    "zk" 'delete-window
-    "z1" 'delete-other-windows
-    "z2" 'split-window-below
-    "z3" 'split-window-right
-    "zz" 'other-window
-
-    "zb" 'switch-to-buffer-other-window
-    "zd" 'dired-other-window
-    "zf" 'find-file-other-window
-
-    (kbd "SPC b") 'ibuffer
-
-    (kbd "SPC SPC") '(lambda () (interactive) (dired "."))
-
-    (kbd "SPC f") 'find-file
-
-    (kbd "SPC g") 'magit
-
-    (kbd "C-e") 'eval-smart)
-  (evil-define-key '(normal motion) dired-mode-map
-    "H" 'dired-up-directory)
-  (evil-define-key '(normal motion) ibuffer-mode-map
-    "H" 'ibuffer-mark-forward)
   )
 
+; Core kbds
+(general-define-key
+ :states '(normal visual operator)
+ "0" 'back-to-indentation
+ "L" 'move-end-of-line
+ "H" 'back-to-indentation)
+(general-define-key
+ :states 'insert
+ "M-w" 'init/evil-forward-word-begin-skip
+ "M-b" 'init/evil-backward-word-begin-skip
+ "M-l" 'evil-forward-char
+ "M-h" 'evil-backward-char
+ "M-j" 'evil-next-visual-line
+ "M-k" 'evil-previous-visual-line)
+(general-define-key
+ :states '(normal motion)
+ "C-q" 'evil-visual-block
+
+ "w" 'init/evil-forward-word-begin-skip
+ "b" 'init/evil-backward-word-begin-skip
+ "j" 'evil-next-visual-line
+ "k" 'evil-previous-visual-line
+
+ "K" 'scroll-down
+ "J" 'scroll-up
+ "M-j" 'scroll-other-window
+ "M-k" 'scroll-other-window-down
+
+ "S-<backspace>" 'delete-whitespace-before-point
+ "C-/" 'comment-dwim
+
+ "zk" 'delete-window
+ "z1" 'delete-other-windows
+ "z2" 'split-window-below
+ "z3" 'split-window-right
+ "zz" 'other-window
+
+ "zb" 'switch-to-buffer-other-window
+ "zd" 'dired-other-window
+ "zf" 'find-file-other-window
+
+
+ "C-e" 'eval-smart)
+(general-define-key
+ :states '(normal motion)
+ :prefix "SPC"
+ "b" 'ibuffer
+ "SPC" '(lambda () (interactive) (dired "."))
+ "f" 'find-file
+ "g" 'magit)
+(general-define-key
+ :states '(normal motion)
+ :keymaps 'dired-mode-map
+ "H" 'dired-up-directory)
+(general-define-key
+ :states '(normal motion)
+ :keymaps 'ibuffer-mode-map
+ "H" 'ibuffer-mark-forward)
+
+; Evil enhancements
+
 (use-package evil-collection
-  :ensure t
+ :ensure t
   :after evil
+  :init
+  (setq evil-want-keybinding nil)
   :config
   (evil-collection-init))
 
 (use-package evil-surround
+ :ensure t
+ :config
+ (global-evil-surround-mode 1))
+
+(use-package key-chord ;; "jj" for exit
   :ensure t
+  :after evil
   :config
-  (global-evil-surround-mode 1))
+  (setq key-chord-two-keys-delay 0.3)
+  (key-chord-mode 1)
+  (key-chord-define evil-insert-state-map "jj" 'evil-normal-state))
 
 ;; Windows
 (use-package rotate
