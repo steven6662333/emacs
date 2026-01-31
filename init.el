@@ -136,7 +136,6 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   :config
   (evil-mode 1)
   (setq evil-emacs-state-modes (delq 'ibuffer-mode evil-emacs-state-modes))
-  ; Keybinds for evil
   (with-eval-after-load 'evil-maps ; Remove evil's keymap for specific keys
     (define-key evil-normal-state-map (kbd "s") nil)
     (define-key evil-normal-state-map (kbd "q") nil)
@@ -147,6 +146,14 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   )
 
 ; Core kbds
+
+(general-create-definer leader-def
+  :states '(normal motion)
+  :keymaps 'override
+  :prefix "SPC")
+(general-create-definer normal-def
+  :states '(normal motion))
+
 (general-define-key
  :states '(normal visual operator)
  "0" 'back-to-indentation
@@ -160,55 +167,62 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
  "M-h" 'evil-backward-char
  "M-j" 'evil-next-visual-line
  "M-k" 'evil-previous-visual-line)
-(general-define-key
- :states '(normal motion)
- "C-q" 'evil-visual-block
+(normal-def
+  "C-q" 'evil-visual-block
 
- "w" 'init/evil-forward-word-begin-skip
- "b" 'init/evil-backward-word-begin-skip
- "j" 'evil-next-visual-line
- "k" 'evil-previous-visual-line
+  "w" 'init/evil-forward-word-begin-skip
+  "b" 'init/evil-backward-word-begin-skip
+  "j" 'evil-next-visual-line
+  "k" 'evil-previous-visual-line
 
- "K" 'scroll-down
- "J" 'scroll-up
- "M-j" 'scroll-other-window
- "M-k" 'scroll-other-window-down
+  "K" 'scroll-down
+  "J" 'scroll-up
+  "M-j" 'scroll-other-window
+  "M-k" 'scroll-other-window-down
 
- "S-<backspace>" 'delete-whitespace-before-point
- "C-/" 'comment-dwim
+  "S-<backspace>" 'delete-whitespace-before-point) ; Motions
 
- "zk" 'delete-window
- "z1" 'delete-other-windows
- "z2" 'split-window-below
- "z3" 'split-window-right
- "zz" 'other-window
+(normal-def
+  :keymaps 'prog-mode-map
+  "C-/" 'comment-dwim
+  "M-/" 'comment-line
+  "C-e" 'eval-smart) ; Prog
 
- "zb" 'switch-to-buffer-other-window
- "zd" 'dired-other-window
- "zf" 'find-file-other-window
+(leader-def
+  "b" 'ibuffer
+  "SPC" '(lambda () (interactive) (dired "."))
+  "f" 'find-file
+  "g" 'magit)
+(leader-def
+  :infix "h"
+  "h" 'help-follow-symbol
+  "v" 'describe-variable
+  "f" 'describe-function
+  "m" 'describe-mode)
 
+(normal-def
+  :keymaps 'dired-mode-map
+  "H" 'dired-up-directory)
+(normal-def
+  :keymaps 'ibuffer-mode-map
+  "H" 'ibuffer-mark-forward)
+(normal-def
+  :keymaps 'override
+  :prefix "z"
+  "k" 'delete-window
+  "1" 'delete-other-windows
+  "2" 'split-window-below
+  "3" 'split-window-right
+  "z" 'other-window
 
- "C-e" 'eval-smart)
-(general-define-key
- :states '(normal motion)
- :prefix "SPC"
- "b" 'ibuffer
- "SPC" '(lambda () (interactive) (dired "."))
- "f" 'find-file
- "g" 'magit)
-(general-define-key
- :states '(normal motion)
- :keymaps 'dired-mode-map
- "H" 'dired-up-directory)
-(general-define-key
- :states '(normal motion)
- :keymaps 'ibuffer-mode-map
- "H" 'ibuffer-mark-forward)
+  "b" 'switch-to-buffer-other-window
+  "d" 'dired-other-window
+  "f" 'find-file-other-window)
 
 ; Evil enhancements
 
 (use-package evil-collection
- :ensure t
+  :ensure t
   :after evil
   :init
   (setq evil-want-keybinding nil)
@@ -216,9 +230,9 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   (evil-collection-init))
 
 (use-package evil-surround
- :ensure t
- :config
- (global-evil-surround-mode 1))
+  :ensure t
+  :config
+  (global-evil-surround-mode 1))
 
 (use-package key-chord ;; "jj" for exit
   :ensure t
@@ -232,20 +246,20 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
 (use-package rotate
   :ensure t
   :config
-  (evil-define-key '(normal motion) 'global "zr" 'rotate-layout))
+  (normal-def "zr" 'rotate-layout))
 
 (use-package windsize
   :ensure t
   :config
-  (evil-define-key '(normal motion) 'global
-    (kbd "M-<up>") 'windsize-up
-    (kbd "M-<down>") 'windsize-down
-    (kbd "M-<left>") 'windsize-left
-    (kbd "M-<right>") 'windsize-right
-    (kbd "S-<up>") 'windmove-swap-states-up
-    (kbd "S-<down>") 'windmove-swap-states-down
-    (kbd "S-<left>") 'windmove-swap-states-left
-    (kbd "S-<right>") 'windmove-swap-states-right
+  (normal-def
+    "M-<up>" 'windsize-up
+    "M-<down>" 'windsize-down
+    "M-<left>" 'windsize-left
+    "M-<right>" 'windsize-right
+    "S-<up>" 'windmove-swap-states-up
+    "S-<down>" 'windmove-swap-states-down
+    "S-<left>" 'windmove-swap-states-left
+    "S-<right>" 'windmove-swap-states-right
     ))
 
 ;; Compeltion
@@ -257,23 +271,13 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   (global-corfu-mode))
 
 ;; Languages
-(use-package lisp-mode)
 
 ;; Magit
 (use-package magit
   :ensure t
   :config
-  (evil-define-key '(normal motion) magit-mode-map
-    "zk" 'delete-window
-    "z1" 'delete-other-windows
-    "z2" 'split-window-below
-    "z3" 'split-window-right
-    "zz" 'other-window
-
-    "zb" 'switch-to-buffer-other-window
-    "zd" 'dired-other-window
-    "zf" 'find-file-other-window
-
+  (normal-def
+    :keymaps 'magit-mode-map
     "h"  'magit-stash
     ))
 
@@ -283,6 +287,14 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   :demand
   :config
   (global-centered-cursor-mode))
+
+;; Folding
+(use-package kirigami
+  :ensure t
+  :config
+  (normal-def
+    "\\" 'kirigami-toggle-fold
+    "|" 'kirigami-close-folds))
 
 (provide 'init)
 ;;; init.el ends here
