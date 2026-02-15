@@ -114,7 +114,6 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
     ;; 无选中区域：执行整个缓冲区的代码
     (eval-buffer)))  ; 求值整个缓冲区
 (defun delete-whitespace-before-point (&optional arg)
-(defun delete-whitespace-before-point (&optional ARGS)
   "删除光标前所有空白字符，直到第一个非空白字符.
 删除后如果光标不在行首，则保留原有的一个空白字符(而非统一空格)"
   (interactive "P") ; 支持交互式调用
