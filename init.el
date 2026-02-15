@@ -305,6 +305,29 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   :demand
   :config
   (global-centered-cursor-mode))
+;; IM
+(use-package sis
+  :ensure t
+  ;; :hook
+  ;; enable the /context/ and /inline region/ mode for specific buffers
+  ;; (((text-mode prog-mode) . sis-context-mode)
+  ;;  ((text-mode prog-mode) . sis-inline-mode))
+
+  :config
+  (cond
+   ((eq system-type 'gnu/linux)  (sis-ism-lazyman-config "1" "2" 'fcitx5))
+   (t                            ()))
+
+  ;; enable the /cursor color/ mode
+  (sis-global-cursor-color-mode t)
+  ;; enable the /respect/ mode
+  (sis-global-respect-mode t)
+  ;; enable the /context/ mode for all buffers
+  (sis-global-context-mode t)
+  ;; enable the /inline english/ mode for all buffers
+  (sis-global-inline-mode t)
+  (setq sis-inline-with-english nil)
+  )
 
 ;; Folding
 (use-package kirigami
