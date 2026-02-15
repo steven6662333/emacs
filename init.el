@@ -6,17 +6,33 @@
 
 ;;; Code:
 
+;; Consts
+(defconst nerd-font "FiraCode Nerd Font Mono-13")
+(defconst main-font "FiraCode Nerd Font Mono-13")
+(defconst skip-chars '(?_ ?- ?\\))
+(defconst unimportant-buffers
+  '("*Help*" "*Warning*" "*Messages*" "*Backtrace*" "\*eldoc")
+  "List of unimportant buffers.")
+
 ;; Path
-(setq custom-file "~/.emacs.d/custom.el")
+(defun init/expand-and-create (NAME)
+  (let ((file (expand-file-name NAME user-emacs-directory)))
+    (unless (file-exists-p file)
+      (if (string= (substring file -1) "/")
+	  (make-directory file t) ;; Create nonexsist parent directory
+	(write-region "" nil file nil 'nomessage)))
+    file))
+
+(setq custom-file (init/expand-and-create "custom.el"))
 (load custom-file)
-(add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
+(add-to-list 'load-path (init/expand-and-create "lisp/"))
 
 ;; GC
 (let ((normal-gc-cons-threshold (* 20 1024 1024))
       (init-gc-cons-threshold (* 128 1024 1024)))
   (setq gc-cons-threshold init-gc-cons-threshold)
   (add-hook 'emacs-startup-hook
-            (lambda () (setq gc-cons-threshold normal-gc-cons-threshold)))) 
+            (lambda () (setq gc-cons-threshold normal-gc-cons-threshold))))
 
 ;; Basic
 ;(setq confirm-kill-emacs #'yes-or-no-p)      ; 在关闭 Emacs 前询问是否确认关闭，防止误触
@@ -40,8 +56,9 @@
 (setq display-line-numbers-type 'relative)   ; （可选）显示相对行号
 (add-to-list 'default-frame-alist '(width . 90))  ; （可选）设定启动图形界面时的初始 Frame 宽度（字符数）
 (add-to-list 'default-frame-alist '(height . 75)) ; （可选）设定启动图形界面时的初始 Frame 高度（字符数）
-(add-to-list 'default-frame-alist '(font . "FiraCode Nerd Font Mono-13"))
+(add-to-list 'default-frame-alist `(font . ,main-font))
 (set-fontset-font t '(?\u4e00 . ?\u9fff) (font-spec :name "思源黑体" :lang 'zh))
+(set-fontset-font t '(?\U0001f300 . ?\U0001f9ff) (font-spec :name "Segoe-UI-EMoji"))
 
 
 (global-set-key (kbd "<ESC><ESC><ESC>") nil)
@@ -50,9 +67,9 @@
 
 ;; Debug
 (defun open-init-file()
-  "Open init.el"
+  "Open init.el."
   (interactive)
-  (find-file "~/.emacs.d/init.el"))
+  (find-file (init/expand-and-create "init.el")))
 (global-set-key (kbd "C-,") 'open-init-file)
 
 ;; Packages
@@ -80,7 +97,7 @@
 
 ;; Keybindings
 
-; Preparations
+;; Preparations
 (defun eval-smart ()
   "Smart evaluation: eval selected region if active, else eval whole buffer.
 Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects."
