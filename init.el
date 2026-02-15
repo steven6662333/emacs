@@ -114,10 +114,12 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
     ;; 无选中区域：执行整个缓冲区的代码
     (eval-buffer)))  ; 求值整个缓冲区
 (defun delete-whitespace-before-point (&optional arg)
-  "删除光标前所有空白字符，直到第一个非空白字符。
-删除后如果光标不在行首，则保留**原有的一个空白字符**（而非统一空格）。
-可选参数ARG无实际作用，仅为兼容Emacs命令习惯。"
+(defun delete-whitespace-before-point (&optional ARGS)
+  "删除光标前所有空白字符，直到第一个非空白字符.
+删除后如果光标不在行首，则保留原有的一个空白字符(而非统一空格)"
   (interactive "P") ; 支持交互式调用
+  (when (eq (point) (line-beginning-position))
+    (delete-char -1))
   (save-excursion   ; 保存当前光标位置，函数结束后恢复
     (let* (
            ;; 记录当前光标位置
@@ -137,15 +139,14 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
                                   (char-to-string (char-after non-whitespace-pos)))))
       
       ;; 1. 删除光标前所有空白字符（从non-whitespace-pos到original-point之间的内容）
-      (when (> original-point non-whitespace-pos)
+      (when (> original-point non-whitespace-pos)   
         (delete-region non-whitespace-pos original-point))
       
       ;; 2. 判断删除后光标是否在行首，若不在则保留**原有的一个空白字符**
       (when (and (> (point) first-non-whitespace) ; 光标不在行首（非空白字符起始位置）
                  (not (bolp))                     ; 光标也不是行首位置
                  original-whitespace)	 ; 存在可保留的原始空白字符
-        (insert original-whitespace))))) ; 插入原始空白字符（而非空格）
-(defconst skip-chars '(?_ ?-))
+        (insert original-whitespace))))) ; 插入原始空白字符（而非空格）  
 (defun init/evil-forward-word-begin-skip ()
   (interactive)
   (evil-forward-word-begin)
@@ -213,12 +214,18 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   "j" 'evil-next-visual-line
   "k" 'evil-previous-visual-line
 
+  "M-[" 'evil-jump-backward
+  "M-]" 'evil-jump-forward
+
   "K" 'scroll-down
   "J" 'scroll-up
   "M-j" 'scroll-other-window
-  "M-k" 'scroll-other-window-down
+  "M-k" 'scroll-other-window-down)
 
-  "S-<backspace>" 'delete-whitespace-before-point) ; Motions
+(general-define-key
+ :keymaps 'override
+ :states '(normal insert)
+  "S-<backspace>" 'delete-whitespace-before-point)
 
 (normal-def
   :keymaps 'prog-mode-map
@@ -227,16 +234,12 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   "C-e" 'eval-smart) ; Prog
 
 (leader-def
-  "b" 'ibuffer
+  "S" 'server-edit
+  "b" 'switch-to-buffer
   "SPC" '(lambda () (interactive) (dired "."))
   "f" 'find-file
-  "g" 'magit)
-(leader-def
-  :infix "h"
-  "h" 'help-follow-symbol
-  "v" 'describe-variable
-  "f" 'describe-function
-  "m" 'describe-mode)
+  "g" 'magit
+  "o f" 'org-roam-node-find)
 
 (normal-def
   :keymaps 'dired-mode-map
@@ -244,10 +247,30 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
 (normal-def
   :keymaps 'ibuffer-mode-map
   "H" 'ibuffer-mark-forward)
+
+(defun kill-unimportant-buffer-and-windows ()
+  "Kill unimportant buffers and windows.
+List of unimportant buffers see `'"
+  (interactive)
+  (dolist (buf-name unimportant-buffers)
+    (let ((bufs (match-buffers buf-name)))
+      (dolist (buf bufs)
+	(when (buffer-live-p buf)
+          ;; Delete windows showing this buffer
+          (dolist (window (get-buffer-window-list buf nil t))
+            (delete-window window))
+          ;; Kill the buffer
+          (kill-buffer buf))))))
+
+;; (defun smart-other-window ()
+;;   (interactive)
+;;   ())
 (normal-def
   :keymaps 'override
   :prefix "z"
+  "q" 'kill-unimportant-buffer-and-windows
   "k" 'delete-window
+  "K" 'kill-buffer-and-window
   "1" 'delete-other-windows
   "2" 'split-window-below
   "3" 'split-window-right
@@ -256,8 +279,10 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   "b" 'switch-to-buffer-other-window
   "d" 'dired-other-window
   "f" 'find-file-other-window)
+(general-define-key
+ :keymaps 'global)
 
-; Evil enhancements
+;; Evil enhancements
 
 (use-package evil-collection
   :ensure t
@@ -265,7 +290,13 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   :init
   (setq evil-want-keybinding nil)
   :config
-  (evil-collection-init))
+  (evil-collection-init)
+  (evil-define-key '(normal motion) dired-mode-map
+    "H" 'dired-up-directory)
+  (evil-define-key '(normal motion) ibuffer-mode-map
+    "SPC" 'ibuffer-mark-forward
+    "o" 'ibuffer-visit-buffer-other-window)
+  )
 
 (use-package evil-surround
   :ensure t
