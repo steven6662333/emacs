@@ -60,6 +60,24 @@
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 (package-initialize)
 
+;; Themes
+(use-package doom-themes
+  :ensure t
+  :custom
+  ;; Global settings (defaults)
+  (doom-themes-enable-bold t)   ; if nil, bold is universally disabled
+  (doom-themes-enable-italic nil) ; if nil, italics is universally disabled
+  :config
+  (load-theme 'doom-1337)
+  ;; Enable flashing mode-line on errors
+  ;; (doom-themes-visual-bell-config)
+  ;; Corrects (and improves) org-mode's native fontification.
+  (doom-themes-org-config)
+  (custom-set-faces
+   `(mode-line ((t (:background ,(doom-color 'base3)))))
+   `(font-lock-comment-face ((t (:foreground ,(doom-color 'base7))))))
+  )
+
 ;; Keybindings
 
 ; Preparations
