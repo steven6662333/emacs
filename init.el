@@ -184,7 +184,7 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
     (define-key evil-motion-state-map (kbd "TAB") nil))
   )
 
-; Core kbds
+;; Core kbds
 
 (general-create-definer leader-def
   :states '(normal motion)
@@ -332,18 +332,169 @@ List of unimportant buffers see `'"
     ))
 
 ;; Compeltion
-(setq tab-always-indent 'complete)
-
 (use-package corfu
   :ensure t
+  :custom
+  (tab-always-indent 'complete)
+  (completion-cycle-threshold nil)
+  (corfu-cycle t)
+  (corfu-preview-current 'insert)
+  (corfu-preselect 'prompt)
+  (corfu-echo-delay '(0.5 . 0.1))
+  :general
+  (:keymaps 'corfu-map
+	    "RET" (lambda () (interactive) (corfu-insert) (newline-and-indent))
+	    "TAB" 'corfu-next
+	    [backtab] 'corfu-previous
+	    "M-j" 'corfu-next
+	    "M-k" 'corfu-previous)
   :init
-  (global-corfu-mode))
+  (global-corfu-mode)
+  :config
+  (corfu-echo-mode)
+  (set-face-attribute 'corfu-echo nil
+		      :foreground (doom-darken 'base8 0.1)))
+(use-package nerd-icons-corfu
+  :after nerd-icons
+  :ensure t
+  :config
+  (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
+(defun init/vertico-tab ()
+  "Help function for `TAB' of vertico completion."
+  (interactive)
+  (let ((prev (minibuffer-contents)))
+    (minibuffer-complete)
+    (if (string= prev (minibuffer-contents))
+	(vertico-next))))
+;; Minibuffer
+(use-package vertico
+  :ensure t
+  :custom
+  ;; Enable context menu. `vertico-multiform-mode' adds a menu in the minibuffer
+  ;; to switch display modes.
+  (context-menu-mode t)
+  ;; Support opening new minibuffers from inside existing minibuffers.
+  (enable-recursive-minibuffers t)
+  ;; Hide commands in M-x which do not work in the current mode.  Vertico
+  ;; commands are hidden in normal buffers. This setting is useful beyond
+  ;; Vertico.
+  (read-extended-command-predicate #'command-completion-default-include-p)
+  ;; Do not allow the cursor in the minibuffer prompt
+  (minibuffer-prompt-properties
+   '(read-only t cursor-intangible t face minibuffer-prompt))
+  (completion-show-inline-help nil) ; To prevent inline-help from blocking `vertico-next'
+  (vertico-count 13)		    ; Number of candidates to display
+  (vertico-resize t)
+  (vertico-cycle t) ; Go from last to first candidate and first to last (cycle)?
+  :general
+  (:keymaps 'vertico-map
+	    "TAB" 'init/vertico-tab  ; Insert selected candidate into text area
+	    "M-TAB" 'minibuffer-complete
+	    "DEL" 'vertico-directory-delete-char
+	    "S-DEL" 'vertico-directory-delete-word
+	    [backtab] 'vertico-previous
+	    "M-k" 'vertico-next ; Swap `j' and `k' for `vertico-reverse-mode'
+	    "M-j" 'vertico-previous
+	    [up] 'previous-history-element
+	    [down] 'next-history-element
+            )
+  :init
+  (vertico-mode)
+  (vertico-reverse-mode))
+(use-package marginalia
+  :ensure t
+  :general
+  (:keymaps '(minibuffer-mode-map completion-list-mode-map)
+         "M-m"  'marginalia-cycle)
+  :init
+  ;; Marginalia must be activated in the :init section of use-package such that
+  ;; the mode gets enabled right away. Note that this forces loading the
+  ;; package.
+  (marginalia-mode))
 
 ;; Languages
+
+;; Latex
+(setq org-preview-latex-default-process 'dvipng)
+
+;; Lsp
+(use-package xref
+  :ensure t
+  :config
+  (normal-def
+    :keymaps 'xref--xref-buffer-mode-map
+    :prefix "g"
+    "D" 'xref-find-definitions
+    "d" 'xref-find-definitions
+    "r" 'xref-find-references
+    )
+  (normal-def
+    :keymaps 'xref--xref-buffer-mode-map
+    "j"  'xref-next-line
+    "k" 'xref-prev-line
+    "J"  'xref-next-group
+    "K" 'xref-prev-group
+   ))
+(use-package eldoc
+  :custom
+  (eldoc-idle-delay 0.2))
+(use-package eglot
+  :hook
+  ((rust-mode python-mode) . 'eglot-ensure)
+  :config
+  (normal-def
+    :keymaps 'eglot-mode-map
+    :state 'normal
+    "<f2>" 'eglot-rename
+    "C-." 'eglot-code-actions
+    )
+  (leader-def
+    :keymaps 'eglot-mode-map
+    :state 'normal
+    "=" 'eglot-format
+    "h h" 'eldoc-doc-buffer
+    )
+  (append
+   '(python-mode . ("uvx" "ty" "server"))
+   '(rust-mode . ("rust-analyzer" :initializationOptions
+		  (:cargo (:buildScripts (:enable t))))) ; cargo.buildScripts.enable = true
+   'eglot-server-programs
+   ))
+
+;; Syntax check
+(use-package flycheck
+  :ensure t
+  :config
+  (normal-def
+    :keymaps 'flycheck-mode-map
+    "<f8>" 'flycheck-next-error
+    "S-<f8>" 'flycheck-previous-error
+    )
+  :hook (prog-mode . flycheck-mode))
+(use-package flycheck-eglot
+  :ensure t
+  :after (flycheck eglot)
+  :config
+  (global-flycheck-eglot-mode 1))
+
+;; Elisp
+(add-hook 'emacs-lisp-mode-hook (lambda ()
+				  (setq flycheck-emacs-lisp-load-path 'inherit)
+				  (leader-def
+				    :keymaps 'emacs-lisp-mode-map
+				    :infix "h"
+				    "v" 'describe-variable
+				    "f" 'describe-function
+				    "h" 'help-follow-symbol)
+				  ))
+
+
 
 ;; Magit
 (use-package magit
   :ensure t
+  :custom
+  (magit-display-buffer-function #'magit-display-buffer-same-window-except-diff-v1)
   :config
   (normal-def
     :keymaps 'magit-mode-map
@@ -356,6 +507,38 @@ List of unimportant buffers see `'"
   :demand
   :config
   (global-centered-cursor-mode))
+(use-package rainbow-delimiters
+  :ensure t
+  :hook
+  (prog-mode . rainbow-delimiters-mode))
+;; (use-package rainbow-mode
+;;   :ensure t
+;;   :hook
+;;   (prog-mode . rainbow-mode))
+(use-package colorful-mode
+  :ensure t
+  :custom
+  (colorful-only-strings 'only-prog)
+  (colorful-use-prefix t)
+  (colorful-extra-color-keyword-functions
+   '(
+     colorful-add-hex-colors
+     ((html-mode css-mode) . (colorful-add-color-names colorful-add-css-variables-colors))
+     colorful-add-rgb-colors
+     colorful-add-hsl-colors
+     (latex-mode . colorful-add-latex-colors)
+     ))
+  :hook
+  (prog-mode . colorful-mode))
+(use-package nerd-icons
+  :ensure t
+  :custom
+  (nerd-icons-font-family nerd-font))
+(use-package transient
+  :ensure t
+  :config
+  (general-def transient-map "<escape>" 'transient-quit-one))
+
 ;; IM
 (use-package sis
   :ensure t
