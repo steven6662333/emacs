@@ -74,7 +74,10 @@
 
 ;; Packages
 (require 'package)
-(add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+;; (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+(setq package-archives '(("gnu"    . "https://mirrors.lzu.edu.cn/elpa/gnu/")
+                         ("nongnu" . "https://mirrors.lzu.edu.cn/elpa/nongnu/")
+                         ("melpa"  . "https://mirrors.lzu.edu.cn/elpa/melpa/")))
 (package-initialize)
 
 ;; Themes
