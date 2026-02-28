@@ -217,8 +217,8 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
  :states 'insert
  "M-w" 'init/evil-forward-word-begin-skip
  "M-b" 'init/evil-backward-word-begin-skip
- "M-l" 'evil-forward-char
- "M-h" 'evil-backward-char
+ "M-l" 'right-char ;; `evil-forward-char' can not get to last char of the line in `insert-state'
+ "M-h" 'left-char
  "M-j" 'evil-next-visual-line
  "M-k" 'evil-previous-visual-line)
 (normal-def
@@ -231,6 +231,8 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
 
   "M-[" 'evil-jump-backward
   "M-]" 'evil-jump-forward
+  "M-{" 'previous-buffer
+  "M-}" 'next-buffer
 
   "K" 'scroll-down
   "J" 'scroll-up
@@ -246,13 +248,13 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   :keymaps 'prog-mode-map
   "C-/" 'comment-dwim
   "M-/" 'comment-line
-  "C-e" 'eval-smart) ; Prog
+  "C-e" 'eval-last-sexp) ; Prog
 
 (leader-def
-  "S" 'server-edit
+  "s" 'server-edit
   "S" '(lambda () (interactive) (jinx-mode 'toggle))
   "b" 'switch-to-buffer
-  "SPC" '(lambda () (interactive) (dired "."))
+  "SPC" (lambda () (interactive) (dired "."))
   "f" 'find-file
   "r" 'recentf
   "g" 'magit
@@ -578,6 +580,11 @@ This only works with orderless and for the first component of the search. Source
   (normal-def
     :keymaps 'magit-mode-map
     "h"  'magit-stash
+    )
+  (normal-def
+    :keymaps 'magit-status-mode-map
+    "M-j" 'magit-section-forward-sibling
+    "M-k" 'magit-section-backward-sibling
     ))
 
 ;; Display
