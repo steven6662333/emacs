@@ -11,7 +11,7 @@
 (defconst main-font "FiraCode Nerd Font Mono-13")
 (defconst skip-chars '(?_ ?- ?\\))
 (defconst unimportant-buffers
-  '("*Help*" "*Warning*" "*Messages*" "*Backtrace*" "\*eldoc")
+  '("*Help*" "*helpful"  "*Warning*" "*Messages*" "*Backtrace*" "\*eldoc" "*sdcv*")
   "List of unimportant buffers.")
 (defvar recentf-exclude-files
   '("^/ssh:" "^/sudo:" "~/.emacs.d/.cache/.*" "recentf$" "/tmp/.*"))
@@ -662,6 +662,21 @@ This only works with orderless and for the first component of the search. Source
   (sis-global-inline-mode t)
   (setq sis-inline-with-english nil)
   )
+
+;; Dict
+(use-package quick-sdcv
+  :ensure t
+  :if (executable-find "sdcv")
+  :custom
+  (quick-sdcv-dictionary-prefix-symbol "►")
+  (quick-sdcv-ellipsis " ▼")
+  :config
+  (normal-def
+    :keymaps 'quick-sdcv-mode-map
+    "q" 'kill-buffer-and-window)
+  (leader-def
+    "d" 'quick-sdcv-search-at-point
+    "h d" 'quick-sdcv-search-input))
 
 ;; Folding
 (use-package kirigami
