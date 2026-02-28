@@ -494,8 +494,6 @@ This only works with orderless and for the first component of the search. Source
 
 ;; Languages
 
-;; Latex
-(setq org-preview-latex-default-process 'dvipng)
 
 ;; Lsp
 (use-package xref
@@ -647,6 +645,53 @@ This only works with orderless and for the first component of the search. Source
     :keymaps '(emacs-lisp-mode-map lisp-interaction-mode-map helpful-mode-map)
     :infix "h"
     "h" 'helpful-at-point))
+
+;; Org
+(use-package org
+  :custom
+  (org-return-follows-link t)
+  (org-directory (init/expand-and-create "~/org/"))
+  (org-startup-indented t)
+  (org-preview-latex-default-process 'dvipng)
+  :config
+  (normal-def
+    :keymaps 'org-mode-map
+    "C-<left>" 'org-metaleft
+    "C-<right>" 'org-metaright
+    "C-<up>" 'org-metaup
+    "C-<down>" 'org-metadown
+    )
+  )
+(use-package xenops
+  :ensure t
+  :after org
+  :custom
+  (xenops-reveal-on-entry t)
+  :hook
+  ((latex-mode org-mode-hook) . xenops-mode)
+  :config
+  (leader-def
+    :keymap '(org-mode-map latex-mode-map)
+    "x" 'xenops-dwim))
+(use-package org-roam
+  :ensure t
+  :after org
+  :init
+  (setq org-roam-v2-ack t) ;; Acknowledge V2 upgrade
+  :config
+  (org-roam-db-autosync-mode)
+  (leader-def
+    :keymaps 'org-mode-map
+    :infix "o"
+    "i" 'org-roam-node-insert
+    ;; "o" 'org-id-get-create
+    "t" 'org-roam-tag-add
+    "l" 'org-roam-buffer-toggle
+    ;; "a" 'org-roam-alias-add
+    )
+  :custom
+  (org-roam-directory (concat org-directory "roam/"))
+  (org-roam-dailies-directory "dailies/"))
 
 ;; IM
 (use-package sis
