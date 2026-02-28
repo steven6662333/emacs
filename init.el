@@ -281,9 +281,12 @@ List of unimportant buffers see `'"
           ;; Kill the buffer
           (kill-buffer buf))))))
 
-;; (defun smart-other-window ()
-;;   (interactive)
-;;   ())
+(defun smart-other-window ()
+  (interactive)
+  (if (length= (window-list-1) 1)
+      (switch-to-buffer (other-buffer))
+    (other-window 1)))
+(general-def :keymaps 'override "M-o" 'smart-other-window)
 (normal-def
   :keymaps 'override
   :prefix "z"
@@ -293,7 +296,7 @@ List of unimportant buffers see `'"
   "1" 'delete-other-windows
   "2" 'split-window-below
   "3" 'split-window-right
-  "z" 'other-window
+  "z" 'smart-other-window
 
   "b" 'switch-to-buffer-other-window
   "d" 'dired-other-window
