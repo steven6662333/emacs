@@ -53,21 +53,24 @@
 (when (display-graphic-p) (toggle-scroll-bar -1)) ; 图形界面时关闭滚动条
 (setq split-width-threshold 0)  ; 始终优先垂直分割（宽度阈值设为0）
 (setq split-height-threshold nil) ; 禁用水平分割的高度阈值
+(setq server-client-instructions nil)
 
 (setq display-line-numbers-type 'relative)   ; （可选）显示相对行号
 (add-to-list 'default-frame-alist '(width . 90))  ; （可选）设定启动图形界面时的初始 Frame 宽度（字符数）
 (add-to-list 'default-frame-alist '(height . 75)) ; （可选）设定启动图形界面时的初始 Frame 高度（字符数）
-(add-to-list 'default-frame-alist `(font . ,main-font))
-(set-fontset-font t '(?\u4e00 . ?\u9fff) (font-spec :name "思源黑体" :lang 'zh))
-(set-fontset-font t '(?\U0001f300 . ?\U0001f9ff) (font-spec :name "Segoe-UI-EMoji"))
 
+(add-to-list 'default-frame-alist `(font . ,main-font))
+(defun init/setfont (arg)
+  (set-fontset-font t '(?\u4e00 . ?\u9fff) (font-spec :name "思源黑体" :lang 'zh))
+  (set-fontset-font t '(?（ . ?）) (font-spec :name "思源黑体"))
+  (set-fontset-font t '(?\U0001f300 . ?\U0001f9ff) (font-spec :name "Segoe-UI-EMoji")))
+(add-hook 'after-make-frame-functions 'init/setfont 100)
 
 (global-set-key (kbd "<ESC><ESC><ESC>") nil)
 (global-set-key (kbd "<escape>") 'keyboard-quit)
 (define-key minibuffer-mode-map (kbd "<escape>") 'minibuffer-keyboard-quit)
 
 ;; Debug
-(defun open-init-file()
 (defun open-init-file ()
   "Open init.el."
   (interactive)
