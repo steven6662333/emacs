@@ -129,7 +129,7 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
 	)
     ;; 无选中区域：执行整个缓冲区的代码
     (eval-buffer)))  ; 求值整个缓冲区
-(defun delete-whitespace-before-point (&optional arg)
+(defun delete-whitespace-before-point (&optional args)
   "删除光标前所有空白字符，直到第一个非空白字符.
 删除后如果光标不在行首，则保留原有的一个空白字符(而非统一空格)"
   (interactive "P") ; 支持交互式调用
@@ -250,6 +250,7 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
 
 (leader-def
   "S" 'server-edit
+  "S" '(lambda () (interactive) (jinx-mode 'toggle))
   "b" 'switch-to-buffer
   "SPC" '(lambda () (interactive) (dired "."))
   "f" 'find-file
@@ -538,7 +539,7 @@ This only works with orderless and for the first component of the search. Source
    'eglot-server-programs
    ))
 
-;; Syntax check
+;; Syntax & spell check
 (use-package flycheck
   :ensure t
   :config
@@ -553,18 +554,19 @@ This only works with orderless and for the first component of the search. Source
   :after (flycheck eglot)
   :config
   (global-flycheck-eglot-mode 1))
+(use-package jinx
+  :ensure t
+  :custom
+  (jinx-languages "en")
+  ;; :hook
+  ;; (emacs-startup . global-jinx-mode)
+  :general
+  (:keymaps 'override
+	    "M-$" 'jinx-correct
+            "C-M-$" 'jinx-languages))
 
 ;; Elisp
-(add-hook 'emacs-lisp-mode-hook (lambda ()
-				  (setq flycheck-emacs-lisp-load-path 'inherit)
-				  (leader-def
-				    :keymaps 'emacs-lisp-mode-map
-				    :infix "h"
-				    "v" 'describe-variable
-				    "f" 'describe-function
-				    "h" 'help-follow-symbol)
-				  ))
-
+(add-hook 'emacs-lisp-mode-hook (lambda () (setq flycheck-emacs-lisp-load-path 'inherit)))
 
 
 ;; Magit
