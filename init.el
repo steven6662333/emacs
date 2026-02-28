@@ -615,6 +615,29 @@ This only works with orderless and for the first component of the search. Source
   :ensure t
   :config
   (general-def transient-map "<escape>" 'transient-quit-one))
+(use-package helpful
+  :ensure t
+  :custom
+  (helpful-max-buffers 1)
+  (helpful-switch-buffer-function 'display-buffer)
+  ;; (counsel-describe-function-function #'helpful-callable)
+  ;; (counsel-describe-variable-function #'helpful-variable)
+  :config
+  (defun init/kill-extra-helpful-buffer (&rest _)
+    "Kill extra `helpful' buffers and windows. Should invoke before `helpful--buffer'(See `advice-add')."
+    (dolist (b (buffer-list))
+      (when (eq (buffer-local-value 'major-mode b) 'helpful-mode)
+	(delete-windows-on b)
+	(kill-buffer b))))
+  (advice-add 'helpful--buffer :before 'init/kill-extra-helpful-buffer)
+  (leader-def
+    :infix "h"
+    "v" 'helpful-symbol
+    "k" 'helpful-key)
+  (leader-def
+    :keymaps '(emacs-lisp-mode-map lisp-interaction-mode-map helpful-mode-map)
+    :infix "h"
+    "h" 'helpful-at-point))
 
 ;; IM
 (use-package sis
