@@ -345,6 +345,17 @@ List of unimportant buffers see `'"
     ))
 
 ;; Compeltion
+(use-package orderless
+  :ensure t
+  :custom
+  (completion-styles '(orderless basic))
+  (completion-category-overrides '((file (styles partial-completion))))
+  ;;(completion-pcm-leading-wildcard t) ;; Emacs 31: partial-completion behaves like substring
+  ;; Orderless:
+  (orderless-matching-styles '(orderless-regexp
+			       orderless-literal
+			       orderless-initialism))
+  )
 (use-package corfu
   :ensure t
   :custom
@@ -366,7 +377,15 @@ List of unimportant buffers see `'"
   :config
   (corfu-echo-mode)
   (set-face-attribute 'corfu-echo nil
-		      :foreground (doom-darken 'base8 0.1)))
+		      :foreground (doom-darken 'base8 0.1))
+  ;; Orderless
+  (add-hook 'corfu-mode-hook
+            (lambda ()
+              (setq-local completion-styles '(orderless basic)
+			  orderless-matching-styles '(orderless-literal
+						      orderless-initialism)
+                          completion-category-overrides nil
+                          completion-category-defaults nil))))
 (use-package nerd-icons-corfu
   :after nerd-icons
   :ensure t
@@ -401,12 +420,13 @@ List of unimportant buffers see `'"
   (vertico-cycle t) ; Go from last to first candidate and first to last (cycle)?
   :general
   (:keymaps 'vertico-map
-	    "TAB" 'init/vertico-tab  ; Insert selected candidate into text area
-	    "M-TAB" 'minibuffer-complete
+	    "TAB" 'init/vertico-tab
+	    "M-TAB" 'vertico-insert
+	    "RET" 'vertico-directory-enter
 	    "DEL" 'vertico-directory-delete-char
 	    "S-DEL" 'vertico-directory-delete-word
 	    [backtab] 'vertico-previous
-	    "M-k" 'vertico-next ; Swap `j' and `k' for `vertico-reverse-mode'
+	    "M-k" 'vertico-next
 	    "M-j" 'vertico-previous
 	    [up] 'previous-history-element
 	    [down] 'next-history-element
@@ -414,6 +434,28 @@ List of unimportant buffers see `'"
   :init
   (vertico-mode)
   (vertico-reverse-mode))
+(use-package consult
+  :ensure t
+  :config
+  (normal-def
+    "/" 'consult-line
+    "?" 'consult-line-multi)
+  (defun noct-consult-line-evil-history (&rest _)
+    "Add latest `consult-line' search pattern to the evil search history ring.
+This only works with orderless and for the first component of the search. Source: https://github.com/minad/consult/issues/318#issuecomment-882067919"
+    (let ((pattern (nth 1 (orderless-compile (car consult--line-history)))))
+      (add-to-history 'regexp-search-ring pattern regexp-search-ring-max)
+      (setq evil-ex-search-pattern (list pattern t t))
+      (setq evil-ex-search-direction 'forward)
+      (when evil-ex-search-persistent-highlight
+        (evil-ex-search-activate-highlight evil-ex-search-pattern))))
+  (defun my-consult-line-evil-history (&rest _)
+    (when consult--line-history
+                (add-to-history
+                 'regexp-search-ring ;; or search-ring
+                 (car consult--line-history)
+                 regexp-search-ring-max)))
+  (advice-add #'consult-line :after #'noct-consult-line-evil-history))
 (use-package marginalia
   :ensure t
   :general
