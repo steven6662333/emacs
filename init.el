@@ -494,6 +494,16 @@ This only works with orderless and for the first component of the search. Source
 
 ;; Languages
 
+;; Rust
+(use-package rust-mode
+  :ensure t)
+;; Markdown
+(use-package markdown-mode
+  :ensure t)
+;; Systemd Units
+(use-package systemd
+  :ensure t)
+
 
 ;; Lsp
 (use-package xref
@@ -691,7 +701,14 @@ This only works with orderless and for the first component of the search. Source
     )
   :custom
   (org-roam-directory (concat org-directory "roam/"))
-  (org-roam-dailies-directory "dailies/"))
+  (org-roam-dailies-directory "dailies/")
+  (org-roam-capture-templates
+	'(("d" "default" plain "%?"
+           :target (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
+                              "#+title: ${title}\n"
+			      "#+STARTUP: latexpreview\n")
+           :unnarrowed t)))
+  )
 
 ;; IM
 (use-package sis
