@@ -13,6 +13,8 @@
 (defconst unimportant-buffers
   '("*Help*" "*Warning*" "*Messages*" "*Backtrace*" "\*eldoc")
   "List of unimportant buffers.")
+(defvar recentf-exclude-files
+  '("^/ssh:" "^/sudo:" "~/.emacs.d/.cache/.*" "recentf$" "/tmp/.*"))
 
 ;; Path
 (defun init/expand-and-create (NAME)
@@ -52,7 +54,6 @@
 (setq split-width-threshold 0)  ; 始终优先垂直分割（宽度阈值设为0）
 (setq split-height-threshold nil) ; 禁用水平分割的高度阈值
 
-(savehist-mode 1)                            ; （可选）打开 Buffer 历史记录保存
 (setq display-line-numbers-type 'relative)   ; （可选）显示相对行号
 (add-to-list 'default-frame-alist '(width . 90))  ; （可选）设定启动图形界面时的初始 Frame 宽度（字符数）
 (add-to-list 'default-frame-alist '(height . 75)) ; （可选）设定启动图形界面时的初始 Frame 高度（字符数）
@@ -67,6 +68,7 @@
 
 ;; Debug
 (defun open-init-file()
+(defun open-init-file ()
   "Open init.el."
   (interactive)
   (find-file (init/expand-and-create "init.el")))
@@ -96,6 +98,17 @@
   (custom-set-faces
    `(mode-line ((t (:background ,(doom-color 'base3)))))
    `(font-lock-comment-face ((t (:foreground ,(doom-color 'base7))))))
+  )
+
+;; Persistence
+(savehist-mode 1)
+(use-package recentf
+  :custom
+  (recentf-max-saved-items 50)
+  :config
+  (recentf-mode)
+  (dolist (itm recentf-exclude-files)
+    (add-to-list 'recentf-exclude itm))
   )
 
 ;; Keybindings
@@ -237,6 +250,7 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   "b" 'switch-to-buffer
   "SPC" '(lambda () (interactive) (dired "."))
   "f" 'find-file
+  "r" 'recentf
   "g" 'magit
   "o f" 'org-roam-node-find)
 
@@ -410,6 +424,25 @@ List of unimportant buffers see `'"
   ;; the mode gets enabled right away. Note that this forces loading the
   ;; package.
   (marginalia-mode))
+(defun init/add-find-file-sudo (&rest _)
+  "Toggle '/sudo::' prefix of file name."
+  (general-def :keymaps 'minibuffer-mode-map "M-s" (lambda ()
+						(interactive)
+						(let* ((prompt (minibuffer-contents))
+						       (re "^/sudo:.*?:" ))
+						  (delete-minibuffer-contents)
+						  (if (string-match-p re prompt)
+						      (progn
+							(insert (replace-regexp-in-string re "" prompt)))
+						    (progn
+						      (insert (concat "/sudo::" (expand-file-name prompt)))
+						      ))))))
+
+(defun init/remove-find-file-sudo (&rest _)
+  "Toggle '/sudo::' prefix of file name."
+  (general-def :keymaps 'minibuffer-mode-map :prefix "M-s" "" nil))
+(advice-add 'read-file-name :before 'init/add-find-file-sudo)
+(advice-add 'read-file-name :after 'init/remove-find-file-sudo)
 
 ;; Languages
 
