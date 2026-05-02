@@ -11,7 +11,7 @@
 (defconst main-font "FiraCode Nerd Font Mono-13")
 (defconst skip-chars '(?_ ?- ?\\))
 (defconst unimportant-buffers
-  '("*Help*" "*helpful"  "*Warning*" "*Messages*" "*Backtrace*" "\*eldoc" "*sdcv*")
+  '("*Help*" "*helpful"  "*Warning*" "*Messages*" "*Backtrace*" "*complication*" "\*eldoc" "*sdcv*")
   "List of unimportant buffers.")
 (defvar recentf-exclude-files
   '("^/ssh:" "^/sudo:" "~/.emacs.d/.cache/.*" "recentf$" "/tmp/.*"))
@@ -50,21 +50,33 @@
 (global-display-line-numbers-mode 1)         ; 在 Window 显示行号
 (tool-bar-mode -1)                           ; （熟练后可选）关闭 Tool bar
 (menu-bar-mode -1)
-(when (display-graphic-p) (toggle-scroll-bar -1)) ; 图形界面时关闭滚动条
-(setq split-width-threshold 0)  ; 始终优先垂直分割（宽度阈值设为0）
+(when (display-graphic-p) (scroll-bar-mode -1)) ; 图形界面时关闭滚动条
+(setq split-width-threshold 0)  ; 始终优先垂直分割（宽度阈值设为 0）
 (setq split-height-threshold nil) ; 禁用水平分割的高度阈值
 (setq server-client-instructions nil)
-
 (setq display-line-numbers-type 'relative)   ; （可选）显示相对行号
 (add-to-list 'default-frame-alist '(width . 90))  ; （可选）设定启动图形界面时的初始 Frame 宽度（字符数）
 (add-to-list 'default-frame-alist '(height . 75)) ; （可选）设定启动图形界面时的初始 Frame 高度（字符数）
 
 (add-to-list 'default-frame-alist `(font . ,main-font))
-(defun init/setfont (arg)
+(defun init/setfont (&optional arg)
+  (scroll-bar-mode -1)
   (set-fontset-font t '(?\u4e00 . ?\u9fff) (font-spec :name "思源黑体" :lang 'zh))
   (set-fontset-font t '(?（ . ?）) (font-spec :name "思源黑体"))
-  (set-fontset-font t '(?\U0001f300 . ?\U0001f9ff) (font-spec :name "Segoe-UI-EMoji")))
+  (dolist (emoji-range
+	'((?\u2600 . ?\u26FF)           ; Miscellaneous Symbols
+          (?\u2700 . ?\u27BF)           ; Dingbats
+          (?\U0001f300 . ?\U0001f5ff)   ; Miscellaneous Symbols and Pictographs
+          (?\U0001f600 . ?\U0001f64f)   ; Emoticons
+          (?\U0001f680 . ?\U0001f6ff)   ; Transport and Map Symbols
+          (?\U0001f900 . ?\U0001f9ff)   ; Supplemental Symbols and Pictographs
+          (?\U0001fa70 . ?\U0001faff)   ; Symbols and Pictographs Extended-A
+          (?\u2b00 . ?\u2bff)))         ; Miscellaneous Symbols and Arrows
+    (set-fontset-font t emoji-range (font-spec :name "Segoe UI Emoji"))))
+
 (add-hook 'after-make-frame-functions 'init/setfont 100)
+
+(init/setfont)
 
 (global-set-key (kbd "<ESC><ESC><ESC>") nil)
 (global-set-key (kbd "<escape>") 'keyboard-quit)
@@ -153,7 +165,7 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
                                            (not (eq non-whitespace-pos original-point)))
                                   (char-to-string (char-after non-whitespace-pos)))))
       
-      ;; 1. 删除光标前所有空白字符（从non-whitespace-pos到original-point之间的内容）
+      ;; 1. 删除光标前所有空白字符（从 non-whitespace-pos 到 original-point 之间的内容）
       (when (> original-point non-whitespace-pos)   
         (delete-region non-whitespace-pos original-point))
       
@@ -174,6 +186,14 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   (let* ((char (char-after (point))))
     (if (memq char skip-chars)
 	(evil-backward-char))))
+(defmacro make-cmd (func &rest args)
+  "Create an interactive command that calls FUNC with ARGS.
+FUNC must be provided with #' syntax.
+Usage: (global-set-key (kbd \"M-*\") 
+                       (make-interactive-command #'yas-expand-snippet \"* $0 *\"))"
+  `(lambda ()
+     (interactive)
+     (,(cadr func) ,@args)))
 
 (use-package general
   :ensure t
@@ -199,6 +219,35 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
     (define-key evil-motion-state-map (kbd "TAB") nil))
   )
 
+;; Kbd enhancements
+
+(use-package evil-collection
+  :ensure t
+  :after evil
+  :init
+  (setq evil-want-keybinding nil)
+  :config
+  (evil-collection-init)
+  (evil-define-key '(normal motion) dired-mode-map
+    "H" 'dired-up-directory)
+  (evil-define-key '(normal motion) ibuffer-mode-map
+    "SPC" 'ibuffer-mark-forward
+    "o" 'ibuffer-visit-buffer-other-window)
+  )
+(use-package evil-surround
+  :ensure t
+  :config
+  (global-evil-surround-mode 1))
+(use-package key-chord ;; "jj" for exit
+  :ensure t
+  :after evil
+  :config
+  (setq key-chord-two-keys-delay 0.3)
+  (key-chord-mode 1)
+  (key-chord-define evil-insert-state-map "jj" 'evil-normal-state))
+(use-package defrepeater
+  :ensure t)
+
 ;; Core kbds
 
 (general-create-definer leader-def
@@ -207,6 +256,7 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   :prefix "SPC")
 (general-create-definer normal-def
   :states '(normal motion))
+(general-create-definer win-def :keymaps 'override :prefix "C-w")
 
 (general-define-key
  :states '(normal visual operator)
@@ -219,8 +269,9 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
  "M-b" 'init/evil-backward-word-begin-skip
  "M-l" 'right-char ;; `evil-forward-char' can not get to last char of the line in `insert-state'
  "M-h" 'left-char
- "M-j" 'evil-next-visual-line
- "M-k" 'evil-previous-visual-line)
+ "M-j" 'scroll-other-window
+ "M-k" 'scroll-other-window-down
+ )
 (normal-def
   "C-q" 'evil-visual-block
 
@@ -237,26 +288,55 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   "K" 'scroll-down
   "J" 'scroll-up
   "M-j" 'scroll-other-window
-  "M-k" 'scroll-other-window-down)
+  "M-k" 'scroll-other-window-down
+
+  "M-s" 'query-replace
+  )
+
+(general-def
+  :keymaps 'override
+  :prefix "C-c"
+  "/" 'evil-ex-nohighlight)
 
 (general-define-key
  :keymaps 'override
  :states '(normal insert)
   "S-<backspace>" 'delete-whitespace-before-point)
+(defun a/kill-minibuffer-contents (&optional arg)
+  "Kill all user input in a minibuffer, or close it if user input is empty.
+
+If the current buffer is not a minibuffer, kill its entire contents."
+  (interactive)
+  (if (string= (minibuffer-contents) "")
+    (minibuffer-keyboard-quit)
+    (progn (kill-new (minibuffer-contents))
+	 (delete-minibuffer-contents))))
+
+(general-define-key
+ :keymaps 'minibuffer-mode-map
+ "S-<backspace>" 'a/kill-minibuffer-contents)
 
 (normal-def
   :keymaps 'prog-mode-map
   "C-/" 'comment-dwim
   "M-/" 'comment-line
-  "C-e" 'eval-last-sexp) ; Prog
+  "C-e" 'eval-last-sexp)
+
+;; Better `find-file'
+(defadvice find-file (before make-directory-maybe (filename &optional wildcards) activate)
+  "Create parent directory if not exists while visiting file."
+  (unless (file-exists-p filename)
+    (let ((dir (file-name-directory filename)))
+      (unless (file-exists-p dir)
+        (if (yes-or-no-p "Create parent directory?") (make-directory dir t))))))
 
 (leader-def
   "s" 'server-edit
   "S" '(lambda () (interactive) (jinx-mode 'toggle))
   "b" 'switch-to-buffer
   "SPC" (lambda () (interactive) (dired "."))
-  "f" 'find-file
   "r" 'recentf
+  "f" 'find-file
   "g" 'magit
   "o f" 'org-roam-node-find)
 
@@ -281,64 +361,17 @@ List of unimportant buffers see `'"
           ;; Kill the buffer
           (kill-buffer buf))))))
 
-(defun smart-other-window ()
-  (interactive)
-  (if (length= (window-list-1) 1)
-      (switch-to-buffer (other-buffer))
-    (other-window 1)))
-(general-def :keymaps 'override "M-o" 'smart-other-window)
-(normal-def
-  :keymaps 'override
-  :prefix "z"
-  "q" 'kill-unimportant-buffer-and-windows
-  "k" 'delete-window
-  "K" 'kill-buffer-and-window
-  "1" 'delete-other-windows
-  "2" 'split-window-below
-  "3" 'split-window-right
-  "z" 'smart-other-window
+;; Window
+(setq other-window-scroll-default #'get-lru-window)
+(setq next-screen-context-lines 2)
 
-  "b" 'switch-to-buffer-other-window
-  "d" 'dired-other-window
-  "f" 'find-file-other-window)
-(general-define-key
- :keymaps 'global)
-
-;; Evil enhancements
-
-(use-package evil-collection
-  :ensure t
-  :after evil
-  :init
-  (setq evil-want-keybinding nil)
+(use-package winner
   :config
-  (evil-collection-init)
-  (evil-define-key '(normal motion) dired-mode-map
-    "H" 'dired-up-directory)
-  (evil-define-key '(normal motion) ibuffer-mode-map
-    "SPC" 'ibuffer-mark-forward
-    "o" 'ibuffer-visit-buffer-other-window)
-  )
-
-(use-package evil-surround
-  :ensure t
-  :config
-  (global-evil-surround-mode 1))
-
-(use-package key-chord ;; "jj" for exit
-  :ensure t
-  :after evil
-  :config
-  (setq key-chord-two-keys-delay 0.3)
-  (key-chord-mode 1)
-  (key-chord-define evil-insert-state-map "jj" 'evil-normal-state))
-
-;; Windows
+  (winner-mode))
 (use-package rotate
   :ensure t
   :config
   (normal-def "zr" 'rotate-layout))
-
 (use-package windsize
   :ensure t
   :config
@@ -352,6 +385,70 @@ List of unimportant buffers see `'"
     "S-<left>" 'windmove-swap-states-left
     "S-<right>" 'windmove-swap-states-right
     ))
+(use-package ace-window
+  :ensure t)
+(use-package buffer-terminator
+  :ensure t
+  :config
+  (buffer-terminator-mode))
+
+(defun w/other-window-mru ()
+  "Select the most recently used window on this frame."
+  (interactive)
+  (when-let ((mru-window
+              (get-mru-window
+               nil nil 'not-this-one-dummy)))
+    (select-window mru-window)))
+(defun w/smart-other-window ()
+  (interactive)
+  (if (length= (window-list-1) 1)
+      (switch-to-buffer (other-buffer))
+    (w/other-window-mru)))
+(defmacro w/with-other-window (&rest body)
+  "Execute forms in BODY in the other-window."
+  `(unless (one-window-p)
+    (with-selected-window (other-window-for-scrolling)
+      ,@body)))
+(defvar w/consult-line-window nil "Window to search in `evil-search-next'.")
+(defun w/consult-line-other-window ()
+  "Excute `consult-line' in other-window.
+See `w/with-other-window',"
+  (interactive)
+  (w/with-other-window
+   (consult-line)))
+(advice-add #'consult-line :around
+	    (lambda (oldfun &rest args)
+	      (setq w/consult-line-window (selected-window))
+	      (apply oldfun args)))
+
+(general-def :keymaps 'override "M-o" 'w/smart-other-window)
+
+(general-def
+  :keymaps 'override
+  :states '(normal insert motion)
+  :prefix "C-w"
+  "w" 'ace-window
+  "C-w" 'ace-window
+  "o" 'other-window-prefix
+  "u" (defrepeater #'winner-undo)
+  "r" (defrepeater #'winner-redo))
+(normal-def
+  :keymaps 'override
+  :prefix "z"
+  "q" 'kill-unimportant-buffer-and-windows
+  "k" 'delete-window
+  "K" 'kill-buffer-and-window
+  "1" 'delete-other-windows
+  "2" 'split-window-below
+  "3" 'split-window-right
+  "z" 'w/smart-other-window
+
+  "o" 'other-window-prefix
+  "b" 'switch-to-buffer-other-window
+  "d" 'dired-other-window
+  "f" 'find-file-other-window)
+(general-define-key
+ :keymaps 'global)
 
 ;; Compeltion
 (use-package orderless
@@ -431,7 +528,7 @@ List of unimportant buffers see `'"
   (:keymaps 'vertico-map
 	    "TAB" 'init/vertico-tab
 	    "M-TAB" 'vertico-insert
-	    "RET" 'vertico-directory-enter
+	    "S-<return>" 'vertico-exit-input
 	    "DEL" 'vertico-directory-delete-char
 	    "S-DEL" 'vertico-directory-delete-word
 	    [backtab] 'vertico-previous
@@ -448,7 +545,8 @@ List of unimportant buffers see `'"
   :config
   (normal-def
     "/" 'consult-line
-    "?" 'consult-line-multi)
+    "?" 'w/consult-line-other-window)
+  ;; Fix `evil-search-next'
   (defun noct-consult-line-evil-history (&rest _)
     "Add latest `consult-line' search pattern to the evil search history ring.
 This only works with orderless and for the first component of the search. Source: https://github.com/minad/consult/issues/318#issuecomment-882067919"
@@ -459,12 +557,32 @@ This only works with orderless and for the first component of the search. Source
       (when evil-ex-search-persistent-highlight
         (evil-ex-search-activate-highlight evil-ex-search-pattern))))
   (defun my-consult-line-evil-history (&rest _)
+    "Add latest `consult-line' search pattern to the evil search history ring."
     (when consult--line-history
                 (add-to-history
                  'regexp-search-ring ;; or search-ring
                  (car consult--line-history)
                  regexp-search-ring-max)))
-  (advice-add #'consult-line :after #'noct-consult-line-evil-history))
+  (advice-add #'consult-line :after #'noct-consult-line-evil-history)
+  (defun w/evil-search-next ()
+    "Repeat the last search in the correct window (see `w/consult-line-window') with `evil-search-next'."
+    (interactive)
+    (if (window-live-p w/consult-line-window)
+	(with-selected-window w/consult-line-window
+	  (evil-search-next))
+      (evil-search-next)))
+  (defun w/evil-search-previous ()
+    "Repeat the last search in the correct window (see `w/consult-line-window') with `evil-search-next'."
+    (interactive)
+    (if (window-live-p w/consult-line-window)
+	(with-selected-window w/consult-line-window
+	  (evil-search-previous))
+      (evil-search-previous)))
+  (normal-def
+    "n" 'w/evil-search-next
+    "N" 'w/evil-search-previous
+    )
+  )
 (use-package marginalia
   :ensure t
   :general
@@ -499,9 +617,23 @@ This only works with orderless and for the first component of the search. Source
 
 ;; Rust
 (use-package rust-mode
-  :ensure t)
+  :ensure t
+  :config
+  (general-unbind 'normal rust-mode-map
+  :with 'ignore
+  [remap rust-test]
+  [remap rust-check]
+  [remap rust-run]))
 ;; Markdown
 (use-package markdown-mode
+  :ensure t)
+;; Kdl
+(use-package kdl-mode
+  :ensure t)
+;; Fish
+(use-package fish-mode
+  :ensure t)
+(use-package fish-completion
   :ensure t)
 ;; Systemd Units
 (use-package systemd
@@ -531,13 +663,14 @@ This only works with orderless and for the first component of the search. Source
   (eldoc-idle-delay 0.2))
 (use-package eglot
   :hook
-  ((rust-mode python-mode) . 'eglot-ensure)
+  ((rust-mode python-mode c-mode c++-mode) . 'eglot-ensure)
   :config
   (normal-def
     :keymaps 'eglot-mode-map
     :state 'normal
     "<f2>" 'eglot-rename
     "C-." 'eglot-code-actions
+    "K" nil ;; Overrride "K" -> `eldoc-doc-buffer'
     )
   (leader-def
     :keymaps 'eglot-mode-map
@@ -561,7 +694,7 @@ This only works with orderless and for the first component of the search. Source
     "<f8>" 'flycheck-next-error
     "S-<f8>" 'flycheck-previous-error
     )
-  :hook (prog-mode . flycheck-mode))
+  :hook (prog-mode-hook . flycheck-mode))
 (use-package flycheck-eglot
   :ensure t
   :after (flycheck eglot)
@@ -581,6 +714,9 @@ This only works with orderless and for the first component of the search. Source
 ;; Elisp
 (add-hook 'emacs-lisp-mode-hook (lambda () (setq flycheck-emacs-lisp-load-path 'inherit)))
 
+;; Snippet
+(use-package yasnippet
+  :ensure t)
 
 ;; Magit
 (use-package magit
@@ -666,6 +802,8 @@ This only works with orderless and for the first component of the search. Source
   (org-directory (init/expand-and-create "~/org/"))
   (org-startup-indented t)
   (org-preview-latex-default-process 'dvipng)
+  :hook
+  (org-mode-hock . (make-cmd #'toggle-truncate-lines nil)) ;; Don't truncate lines
   :config
   (normal-def
     :keymaps 'org-mode-map
@@ -673,19 +811,41 @@ This only works with orderless and for the first component of the search. Source
     "C-<right>" 'org-metaright
     "C-<up>" 'org-metaup
     "C-<down>" 'org-metadown
+    "C-," 'open-init-file
+    )
+  (general-def
+    :keymaps 'org-mode-map
+    :states 'insert
+    "M--" (make-cmd #'yas-expand-snippet " -$0- ")
+    "M-/" (make-cmd #'yas-expand-snippet " /$0/ ")
+    "M-=" (make-cmd #'yas-expand-snippet " =$0= ")
+    "M-*" (make-cmd #'yas-expand-snippet " *$0* ")
+    "M-8" (make-cmd #'yas-expand-snippet " *$0* ")
+
+    "M-t" 'org-insert-todo-heading
     )
   )
-(use-package xenops
-  :ensure t
+(use-package org-agenda
   :after org
   :custom
-  (xenops-reveal-on-entry t)
-  :hook
-  ((latex-mode org-mode-hook) . xenops-mode)
+  (org-agenda-files `(,(init/expand-and-create "~/org/agenda")))
   :config
-  (leader-def
-    :keymap '(org-mode-map latex-mode-map)
-    "x" 'xenops-dwim))
+  (normal-def
+    :keymaps 'override
+    "M-<SPC>" (make-cmd #'org-agenda nil "c"))
+  (normal-def
+    :keymaps 'org-mode-map
+    "M-t" 'org-todo
+    )
+  (normal-def
+    :infix "C-c"
+    :keymaps 'org-mode-map
+    "<up>" (defrepeater 'org-timestamp-up)
+    "<down>" (defrepeater 'org-timestamp-down)
+    "e" 'org-export-dispatch)
+  (org-add-agenda-custom-command
+   '("c" "Custom agenda view" agenda ""))
+  )
 (use-package org-roam
   :ensure t
   :after org
@@ -708,10 +868,131 @@ This only works with orderless and for the first component of the search. Source
   (org-roam-capture-templates
 	'(("d" "default" plain "%?"
            :target (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
-                              "#+title: ${title}\n"
-			      "#+STARTUP: latexpreview\n")
-           :unnarrowed t)))
+                              "#+title: ${title}
+#+STARTUP: latexpreview\n")
+           :unnarrowed t)
+
+	  ))
   )
+(use-package xenops
+  :ensure t
+  :after org
+  :custom
+  (xenops-reveal-on-entry t)
+  :hook
+  ((latex-mode org-mode-hook) . xenops-mode)
+  :config
+  (leader-def
+    :keymap '(org-mode-map latex-mode-map)
+    "x" 'xenops-dwim))
+(use-package org-appear
+  :ensure t
+  :after org
+  :custom
+  (org-hide-emphasis-markers t)
+  :init
+  ;; inline mark of Chinese 
+  (defvar org-hide-space-keywords
+    '(("\\cc\\( \\)[*/_=~+]\\cc.*?[*/_=~+]"
+       (0 (prog1 () (when org-hide-emphasis-markers (add-text-properties (match-beginning 1) (match-end 1) '(invisible t))))))
+      ("[*/_=~+].*?\\cc[*/_=~+]\\( \\)\\cc"
+       (0 (prog1 () (when org-hide-emphasis-markers (add-text-properties (match-beginning 1) (match-end 1) '(invisible t))))))))
+  (font-lock-add-keywords 'org-mode org-hide-space-keywords 'append)
+  ;; hack `org-appear--show-invisible'
+  (defun o/org-appear--show-invisible (elem)
+    "Silently remove invisible property from invisible parts of element ELEM."
+    (let* ((elem-at-point (org-appear--parse-elem elem))
+	   (elem-type (car elem))
+	   (start (plist-get elem-at-point :start))
+	   (end (plist-get elem-at-point :end))
+	   (visible-start (plist-get elem-at-point :visible-start))
+	   (visible-end (plist-get elem-at-point :visible-end)))
+      (when (and (eq org-appear-autolinks 'just-brackets)
+		 (eq elem-type 'link))
+	(setq start (1- visible-start))
+	(setq end (1+ visible-end)))
+      (with-silent-modifications
+	(cond ((eq elem-type 'entity)
+	       (decompose-region start end))
+	      ((memq elem-type '(latex-fragment latex-environment))
+	       (when org-appear-autosubmarkers
+		 (remove-text-properties start end '(invisible)))
+	       (when org-appear-autoentities
+		 (decompose-region start end)))
+	      ((eq elem-type 'keyword)
+	       (remove-text-properties start end '(invisible org-link)))
+	      ((and (featurep 'org-fold)
+		    (eq elem-type 'link)
+		    (eq org-fold-core-style 'text-properties))
+	       (remove-text-properties start
+				       visible-start
+				       (list (org-fold-core--property-symbol-get-create 'org-link) nil))
+	       (remove-text-properties visible-end
+				       end
+				       (list (org-fold-core--property-symbol-get-create 'org-link) nil)))
+	      (t
+	       ;; (remove-text-properties start visible-start '(invisible org-link))
+	       (remove-text-properties (1- start) visible-start '(invisible org-link))
+	       ;; (remove-text-properties visible-end end '(invisible org-link))
+	       (remove-text-properties visible-end (1+ end) '(invisible org-link))
+	       )))))
+  (advice-add 'org-appear--show-invisible :override 'o/org-appear--show-invisible)
+  ;; evil integration
+  (setq org-appear-trigger 'manual)
+  (add-hook 'org-mode-hook 'org-appear-mode)
+  (add-hook 'org-mode-hook (lambda ()
+                             (add-hook 'evil-insert-state-entry-hook
+                                       #'org-appear-manual-start
+                                       nil
+                                       t)
+                             (add-hook 'evil-insert-state-exit-hook
+                                       #'org-appear-manual-stop
+                                       nil
+                                       t)))
+
+  )
+;; Provides visual alignment for Org Mode, Markdown and table.el tables
+(use-package valign
+  :ensure t
+  :hook
+  (org-mode-hook . valign-mode))
+
+;; Shell & Terminal & Complication
+(use-package shell
+  :custom
+  (explicit-shell-file-name "/usr/bin/fish")
+  (shell-file-name "/usr/bin/fish"))
+(use-package compile
+  :custom
+  (compilation-auto-jump-to-first-error t)
+  :general
+  ("C-c C-c" 'compile)
+  (:keymaps 'compilation-mode-map
+	    "j" 'compilation-next-error
+	    "k" 'compilation-previous-error)
+  :config
+  (defun cmpi/finish-focus-comp (&optional buf-or-proc arg2)
+    (let* ((comp-buf (if (processp buf-or-proc)
+                         (process-buffer buf-or-proc)
+                       buf-or-proc))
+           (window (get-buffer-window comp-buf)))
+      (if window
+          (select-window window)
+        (switch-to-buffer-other-window comp-buf))))
+  (add-hook 'compilation-finish-functions 'cmpi/finish-focus-comp)
+  (add-hook 'compilation-start-functions 'cmpi/finish-focus-comp)
+  )
+(use-package fancy-compilation
+  :ensure t
+  :after compile
+  :custom
+  (fancy-compilation-override-colors nil)
+  :config
+  (fancy-compilation-mode))
+
+;; Web Browser
+(setq browse-url-browser-function 'browse-url-firefox)
+(setq browse-url-firefox-program "zen")
 
 ;; IM
 (use-package sis
@@ -762,3 +1043,4 @@ This only works with orderless and for the first component of the search. Source
 
 (provide 'init)
 ;;; init.el ends here
+
