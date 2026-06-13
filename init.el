@@ -74,9 +74,8 @@
           (?\u2b00 . ?\u2bff)))         ; Miscellaneous Symbols and Arrows
     (set-fontset-font t emoji-range (font-spec :name "Segoe UI Emoji"))))
 
-(add-hook 'after-make-frame-functions 'init/setfont 100)
-
-(init/setfont)
+(add-hook 'window-setup-hook 'init/setfont 100) ;; For `emacs'
+(add-hook 'server-after-make-frame-hook 'init/setfont 100) ;; For `emacsclient'
 
 (global-set-key (kbd "<ESC><ESC><ESC>") nil)
 (global-set-key (kbd "<escape>") 'keyboard-quit)
