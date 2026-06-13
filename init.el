@@ -16,7 +16,7 @@
 (defvar recentf-exclude-files
   '("^/ssh:" "^/sudo:" "~/.emacs.d/.cache/.*" "recentf$" "/tmp/.*"))
 
-;; Path
+;; Helpers
 (defun init/expand-and-create (NAME)
   (let ((file (expand-file-name NAME user-emacs-directory)))
     (unless (file-exists-p file)
@@ -24,7 +24,10 @@
 	  (make-directory file t) ;; Create nonexsist parent directory
 	(write-region "" nil file nil 'nomessage)))
     file))
+(defun init/show-msg ()
+  (with-current-buffer "*Messages*" (goto-char (point-max))))
 
+;; Path
 (setq custom-file (init/expand-and-create "custom.el"))
 (load custom-file)
 (add-to-list 'load-path (init/expand-and-create "lisp/"))
@@ -638,6 +641,37 @@ This only works with orderless and for the first component of the search. Source
 (use-package systemd
   :ensure t)
 
+;; Treesitter
+
+;; TODO replace X-mode to X-ts-mode
+
+(defun ts/treesit-install-checked (out-dir)
+  "Build and install the tree-sitter language grammar library
+with `treesit-install-language-grammar' foreach LANG described
+in `treesit-language-source-alist', skipping installation of a
+LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
+  ;; Since shell commands called by `treesit-install-language-grammar' is
+  ;; executed synchronously, a popup `*Messages*' buffer should make the
+  ;; installation process less annoying.
+  (init/show-msg)
+  (message "Try install treesitter:")
+  (dolist (recipe treesit-language-source-alist)
+    (let* (
+	   (lang (car recipe))
+	   (so (format "libtree-sitter-%S.so" lang))
+	   (lib (file-name-concat out-dir so))
+	   )
+      (if (file-exists-p lib)
+	  (message "Treesitter for '%S' is available, skip" lang)
+	(progn
+	  (message "Building %s" so)
+	  (treesit-install-language-grammar lang out-dir)
+	  )
+	)
+      )))
+(if (eq system-type 'gnu/linux)
+  (ts/treesit-install-checked (init/expand-and-create "tree-sitter/"))
+  )
 
 ;; Lsp
 (use-package xref
