@@ -846,8 +846,10 @@ LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
   (org-directory (init/expand-and-create "~/org/"))
   (org-startup-indented t)
   (org-preview-latex-default-process 'dvipng)
-  :hook
-  (org-mode-hock . (make-cmd #'toggle-truncate-lines nil)) ;; Don't truncate lines
+  (org-time-stamp-custom-formats ("%m/%d/%y W%u" . "%m/%d/%y W%u %H:%M"))
+  ;; :hook
+  ((org-mode-hook . (lambda () (toggle-truncate-lines -1)))) ;; Don't truncate lines
+  ;; (org-mode-hook . (make-cmd #'toggle-truncate-lines -1)) ;; Don't truncate lines
   :config
   (normal-def
     :keymaps 'org-mode-map
@@ -868,18 +870,71 @@ LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
 
     "M-t" 'org-insert-todo-heading
     )
+
+  (defun org/do-subtree (func &optional up)
+    "Loop over the current subtree.
+This puts point at the start of the current subtree, and mark at
+the end.  If a numeric prefix UP is given, move up into the
+hierarchy of headlines by UP levels before marking the subtree."
+    (interactive "P")
+    (org-with-limited-levels
+     (cond ((org-at-heading-p) (forward-line 0))
+	   ((org-before-first-heading-p) (user-error "Not in a subtree"))
+	   (t (outline-previous-visible-heading 1))))
+    (when up (while (and (> up 0) (org-up-heading-safe)) (cl-decf up)))
+    (if (called-interactively-p 'any)
+	(call-interactively func)
+      (apply func nil)))
   )
 (use-package org-agenda
   :after org
   :custom
   (org-agenda-files `(,(init/expand-and-create "~/org/agenda")))
   :config
+  (defun org-agenda-next-header ()
+    "Jump to the next header in an agenda series."
+    (interactive)
+    (-org-agenda-goto-header))
+
+  (defun org-agenda-previous-header ()
+    "Jump to the previous header in an agenda series."
+    (interactive)
+    (-org-agenda-goto-header t))
+
+  (defun -org-agenda-goto-header (&optional backwards)
+    "Find the next agenda series header forwards or BACKWARDS."
+    (let ((pos (save-excursion
+		 (goto-char (if backwards
+				(line-beginning-position)
+                              (line-end-position)))
+		 (let* ((find-func (if backwards
+                                       'previous-single-property-change
+                                     'next-single-property-change))
+			(end-func (if backwards
+                                      'max
+                                    'min))
+			(all-pos-raw (list (funcall find-func (point) 'org-agenda-structural-header)
+                                           ;; (funcall find-func (point) 'org-agenda-date-header)
+					   ))
+			(all-pos (cl-remove-if-not 'numberp all-pos-raw))
+			(prop-pos (if all-pos (apply end-func all-pos) nil)))
+                   prop-pos))))
+      (if pos (goto-char pos))
+      (if backwards (goto-char (line-beginning-position)))))
+  (general-def
+    :keymaps 'org-agenda-mode-map
+    "s" (lambda () (org-save-all-org-buffers) (org-agenda-redo-all))
+    "J" 'org-agenda-next-header
+    "K" 'org-agenda-previous-header
+    "j" 'org-agenda-next-item
+    "k" 'org-agenda-previous-item)
   (normal-def
     :keymaps 'override
     "M-<SPC>" (make-cmd #'org-agenda nil "c"))
   (normal-def
     :keymaps 'org-mode-map
     "M-t" 'org-todo
+    "M-p" 'org-priority-down
     )
   (normal-def
     :infix "C-c"
@@ -887,8 +942,31 @@ LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
     "<up>" (defrepeater 'org-timestamp-up)
     "<down>" (defrepeater 'org-timestamp-down)
     "e" 'org-export-dispatch)
+  (defun org/skip-subtree-if-priority (priority)
+    "Skip an agenda subtree if it has a priority of PRIORITY.
+
+PRIORITY may be one of the characters `?A', `?B' or `?C'.
+
+The default “lowest priority” value is 67, and the ASCII value of “A” is 65, so the numeric value of priority “A” is 2,000, “B” (ASCII value 66) is 1,000, and “C” (ASCII value 67) is 0."
+    (let ((subtree-end (save-excursion (org-end-of-subtree t)))
+          (pri-value (* 1000 (- org-lowest-priority priority)))
+          (pri-current (org-get-priority (thing-at-point 'line t))))
+      (if (= pri-value pri-current)
+          subtree-end
+	nil))
   (org-add-agenda-custom-command
-   '("c" "Custom agenda view" agenda ""))
+   '("c" "Simple agenda view"
+      ((tags "PRIORITY=\"A\""
+             ((org-agenda-skip-function '(org-agenda-skip-entry-if 'todo 'done))
+              (org-agenda-overriding-header "High-priority TODOs:")))
+       (agenda "")
+       (alltodo ""
+		;; Filter TODOs with a priority of `?A', a SCHEDULED or a DEADLINE
+		((org-agenda-skip-function
+		  '(or (org/skip-subtree-if-priority ?A)
+		       ;; `nil' means only the entry (i.e. the text before the next heading) is checked
+		       (org-agenda-skip-if nil '(scheduled deadline)))))
+		))))
   )
 (use-package org-roam
   :ensure t
