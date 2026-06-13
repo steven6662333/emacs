@@ -631,7 +631,18 @@ This only works with orderless and for the first component of the search. Source
   :ensure t)
 ;; Kdl
 (use-package kdl-mode
-  :ensure t)
+  :ensure t
+  :config
+  (add-to-list 'treesit-language-source-alist
+               '(kdl . ("https://github.com/tree-sitter-grammars/tree-sitter-kdl"
+                        "master" "src"))))
+;; Typescript
+
+(add-to-list 'treesit-language-source-alist
+               '(typescript . ("https://github.com/tree-sitter/tree-sitter-typescript"
+                               "master" "typescript/src")))
+(add-to-list 'auto-mode-alist '("\\.ts\\'" . typescript-ts-mode))
+
 ;; Fish
 (use-package fish-mode
   :ensure t)
