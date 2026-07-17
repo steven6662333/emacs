@@ -10,15 +10,15 @@
 (defconst nerd-font "FiraCode Nerd Font Mono-13")
 (defconst main-font "FiraCode Nerd Font Mono-13")
 (defconst skip-chars '(?_ ?- ?\\))
-(defconst unimportant-buffers
+(defvar unimportant-buffers
   '("*Help*" "*helpful"  "*Warning*" "*Messages*" "*Backtrace*" "*complication*" "\*eldoc" "*sdcv*")
   "List of unimportant buffers.")
 (defvar recentf-exclude-files
   '("^/ssh:" "^/sudo:" "~/.emacs.d/.cache/.*" "recentf$" "/tmp/.*"))
 
 ;; Helpers
-(defun init/expand-and-create (NAME)
-  (let ((file (expand-file-name NAME user-emacs-directory)))
+(defun init/expand-and-create (name &optional dir)
+  (let ((file (expand-file-name name (or dir user-emacs-directory))))
     (unless (file-exists-p file)
       (if (string= (substring file -1) "/")
 	  (make-directory file t) ;; Create nonexsist parent directory
@@ -26,6 +26,14 @@
     file))
 (defun init/show-msg ()
   (with-current-buffer "*Messages*" (goto-char (point-max))))
+(defmacro make-cmd (func &rest args)
+  "Create an interactive command that calls FUNC with ARGS.
+FUNC must be provided with #' syntax.
+Usage: (global-set-key (kbd \"M-*\")
+                       (make-cmd #'yas-expand-snippet \"* $0 *\"))"
+  `(lambda ()
+     (interactive)
+     (,(cadr func) ,@args)))
 
 ;; Path
 (setq custom-file (init/expand-and-create "custom.el"))
@@ -49,6 +57,7 @@
 (delete-selection-mode t)                    ; 选中文本后输入文本会替换文本（更符合我们习惯了的其它编辑器的逻辑）
 (setq inhibit-startup-message t)             ; 关闭启动 Emacs 时的欢迎界面
 (setq make-backup-files nil)                 ; 关闭文件自动备份
+ 
 (add-hook 'prog-mode-hook #'hs-minor-mode)   ; 编程模式下，可以折叠代码块
 (global-display-line-numbers-mode 1)         ; 在 Window 显示行号
 (tool-bar-mode -1)                           ; （熟练后可选）关闭 Tool bar
@@ -60,6 +69,13 @@
 (setq display-line-numbers-type 'relative)   ; （可选）显示相对行号
 (add-to-list 'default-frame-alist '(width . 90))  ; （可选）设定启动图形界面时的初始 Frame 宽度（字符数）
 (add-to-list 'default-frame-alist '(height . 75)) ; （可选）设定启动图形界面时的初始 Frame 高度（字符数）
+(setq initial-scratch-message "")
+(global-auto-revert-mode) ;; Auto load every buffer if its visited file on disk is modified
+;; Presistence
+(setq desktop-load-locked-desktop 'check-pid)
+;; FIXME: Error (frameset): Wrong type argument: number-or-marker-p, nil
+(add-hook 'server-after-make-frame-hook (lambda () (ignore-errors (desktop-read) (desktop-save-mode 1)))
+(add-hook 'kill-emacs-hook 'desktop-save-in-desktop-dir -100))
 
 (add-to-list 'default-frame-alist `(font . ,main-font))
 (defun init/setfont (&optional arg)
@@ -77,8 +93,8 @@
           (?\u2b00 . ?\u2bff)))         ; Miscellaneous Symbols and Arrows
     (set-fontset-font t emoji-range (font-spec :name "Segoe UI Emoji"))))
 
-(add-hook 'window-setup-hook 'init/setfont 100) ;; For `emacs'
-(add-hook 'server-after-make-frame-hook 'init/setfont 100) ;; For `emacsclient'
+(add-hook 'window-setup-hook 'init/setfont 100) ;; For startup via `emacs'
+(add-hook 'server-after-make-frame-hook 'init/setfont 100) ;; For startup via `emacsclient'
 
 (global-set-key (kbd "<ESC><ESC><ESC>") nil)
 (global-set-key (kbd "<escape>") 'keyboard-quit)
@@ -114,14 +130,15 @@
   (doom-themes-org-config)
   (custom-set-faces
    `(mode-line ((t (:background ,(doom-color 'base3)))))
-   `(font-lock-comment-face ((t (:foreground ,(doom-color 'base7))))))
+   `(font-lock-comment-face ((t (:foreground ,(doom-color 'base7)))))
+   )
   )
 
 ;; Persistence
 (savehist-mode 1)
 (use-package recentf
   :custom
-  (recentf-max-saved-items 50)
+  (recentf-max-saved-items 200)
   :config
   (recentf-mode)
   (dolist (itm recentf-exclude-files)
@@ -188,14 +205,37 @@ Works for Emacs Lisp (elisp) by default, can be adapted for other Lisp dialects.
   (let* ((char (char-after (point))))
     (if (memq char skip-chars)
 	(evil-backward-char))))
-(defmacro make-cmd (func &rest args)
-  "Create an interactive command that calls FUNC with ARGS.
-FUNC must be provided with #' syntax.
-Usage: (global-set-key (kbd \"M-*\") 
-                       (make-interactive-command #'yas-expand-snippet \"* $0 *\"))"
-  `(lambda ()
-     (interactive)
-     (,(cadr func) ,@args)))
+(defvar kbd/non-keyword-chars "()<>/\\|[]{},.?'\";:-_=+*&^%$#@!`~ （）《》？。，、“”；：【】「」！——"
+  "A string consists of characters to be ignore in `kbd/extract-keywords'.
+
+
+It should contain a space to handle extra space in the string to extract.
+For instance, \"There're 2 spaces between A  B.\" -> \"There re 2 spaces between A B\"")
+(defun kbd/extract-keywords (raw)
+  "Return a string containing keywords in RAW.
+
+The string returned is separated by space and excludes punctuations (or any other characters) listed in `kbd/non-keyword-chars'.
+For instance, input \"/A Cool Book/(its-my-work)\" will return \"A Cool Book its-my-work\""
+  (let (
+	 (char-list nil)
+	 )
+    (cl-loop
+     for c across raw do
+     (if (seq-contains-p kbd/non-keyword-chars c)
+	 (unless (eq (car char-list) ? ) (push ?  char-list))
+       (push c char-list))
+     )
+    (string-trim
+     (apply #'string (reverse char-list)))))
+(defun kbd/extract-keywords-from-kill-ring (&optional arg)
+  "Duplicate the latest kill in `kill-ring' and filter it with `kbd/extract-keywords'."
+  (interactive)
+  (let (
+	(kw (kbd/extract-keywords (current-kill 0)))
+	)
+    (message "Copied: %s" kw)
+    (kill-new kw)))
+
 
 (use-package general
   :ensure t
@@ -240,15 +280,25 @@ Usage: (global-set-key (kbd \"M-*\")
   :ensure t
   :config
   (global-evil-surround-mode 1))
-(use-package key-chord ;; "jj" for exit
-  :ensure t
-  :after evil
-  :config
-  (setq key-chord-two-keys-delay 0.3)
-  (key-chord-mode 1)
-  (key-chord-define evil-insert-state-map "jj" 'evil-normal-state))
 (use-package defrepeater
   :ensure t)
+
+(defmacro general/bind-around (fn &rest args)
+  "Advice keybinding before calling FN and unbind it after calling or error.
+The advice is added via (`advice-add' fn :around ...).
+Keybinding is applyed via (`general-def' ,@args). 
+The Last element of ARGS must be the command to bind.
+Only ONE Keybinding is allowed."
+  (let ((general-args (butlast args)))
+     ;; `general-args' contains everything `general-def' required except for command
+     `(advice-add ,fn :around (lambda (oldfun &rest r)
+			       (general-def
+				 ,@args) ;; `args' contains key and command
+			       (unwind-protect
+				  (apply oldfun r)
+				 (general-def
+				   ,@general-args nil)))) ;; Finally, unbind key
+    ))
 
 ;; Core kbds
 
@@ -260,6 +310,10 @@ Usage: (global-set-key (kbd \"M-*\")
   :states '(normal motion))
 (general-create-definer win-def :keymaps 'override :prefix "C-w")
 
+
+(general-def
+  :keymaps 'override
+  "C-," 'open-init-file)
 (general-define-key
  :states '(normal visual operator)
  "0" 'back-to-indentation
@@ -298,7 +352,8 @@ Usage: (global-set-key (kbd \"M-*\")
 (general-def
   :keymaps 'override
   :prefix "C-c"
-  "/" 'evil-ex-nohighlight)
+  "/" 'evil-ex-nohighlight
+  "C-e" 'kbd/extract-keywords-from-kill-ring)
 
 (general-define-key
  :keymaps 'override
@@ -317,11 +372,16 @@ If the current buffer is not a minibuffer, kill its entire contents."
 (general-define-key
  :keymaps 'minibuffer-mode-map
  "S-<backspace>" 'a/kill-minibuffer-contents)
+(defun comment/dwim (&optional arg)
+  (interactive)
+  (if (and (eq evil-state 'visual) (eq evil-visual-selection 'line))
+      (call-interactively 'comment-or-uncomment-region)
+    (comment-line current-prefix-arg))
+  )
 
 (normal-def
   :keymaps 'prog-mode-map
-  "C-/" 'comment-dwim
-  "M-/" 'comment-line
+  "M-/" 'comment/dwim
   "C-e" 'eval-last-sexp)
 
 ;; Better `find-file'
@@ -333,18 +393,23 @@ If the current buffer is not a minibuffer, kill its entire contents."
         (if (yes-or-no-p "Create parent directory?") (make-directory dir t))))))
 
 (leader-def
-  "s" 'server-edit
-  "S" '(lambda () (interactive) (jinx-mode 'toggle))
+  "s" (make-cmd #'jinx-mode 'toggle)
   "b" 'switch-to-buffer
-  "SPC" (lambda () (interactive) (dired "."))
+  "o b" 'switch-to-buffer-other-window
+  "B" 'ibuffer
+  "SPC" (make-cmd #'dired ".")
   "r" 'recentf
   "f" 'find-file
   "g" 'magit
+  "o t" 'org-roam-dailies-goto-date
   "o f" 'org-roam-node-find)
 
 (normal-def
   :keymaps 'dired-mode-map
-  "H" 'dired-up-directory)
+  "H" 'dired-up-directory
+  "c" 'dired-do-copy
+  "C" 'dired-do-compress-to
+  "T" 'dired-create-empty-file)
 (normal-def
   :keymaps 'ibuffer-mode-map
   "H" 'ibuffer-mark-forward)
@@ -461,8 +526,8 @@ See `w/with-other-window',"
   ;;(completion-pcm-leading-wildcard t) ;; Emacs 31: partial-completion behaves like substring
   ;; Orderless:
   (orderless-matching-styles '(orderless-regexp
-			       orderless-literal
-			       orderless-initialism))
+			       ;; orderless-initialism
+			       orderless-literal))
   )
 (use-package corfu
   :ensure t
@@ -506,6 +571,12 @@ See `w/with-other-window',"
     (minibuffer-complete)
     (if (string= prev (minibuffer-contents))
 	(vertico-next))))
+(use-package cape
+  :ensure t
+  :general
+  (:state 'insert
+	  "C-f" #'cape-file
+	  "M-/" #'cape-dabbrev))
 ;; Minibuffer
 (use-package vertico
   :ensure t
@@ -548,24 +619,49 @@ See `w/with-other-window',"
   (normal-def
     "/" 'consult-line
     "?" 'w/consult-line-other-window)
+  (normal-def
+    :keymaps 'org-mode-map
+    "gr" 'consult-org-heading)
+  (general-def
+    :states '(normal insert)
+    "M-y" 'consult/evil-paste-pop)
+  (general/bind-around 'consult--read-from-kill-ring :keymaps 'minibuffer-mode-map "M-y" 'vertico-next)
+  (defun consult/evil-paste-pop (&optional arg)
+    (interactive)
+    (unless (memq last-command
+                  '(evil-paste-after
+                    evil-paste-before
+                    evil-visual-paste))
+      (user-error "Previous command was not an evil-paste: %s" last-command))
+    (unless evil-last-paste
+      (user-error "Previous paste command used a register"))
+    (evil-undo-pop)
+    (goto-char (nth 2 evil-last-paste))
+    (setq this-command (nth 0 evil-last-paste))
+    ;; use temporary kill-ring, so the paste cannot modify it
+    (let ((kill-ring (list (consult--read-from-kill-ring)))
+	  ;; FIXME: Except for visual mode, pasting and poping themselves works. Preview (via consult) shifts in any case.
+          (kill-ring-yank-pointer kill-ring))
+      (when (eq last-command 'evil-visual-paste)
+	(let ((evil-no-display t))
+          (evil-visual-restore)))
+      (funcall (nth 0 evil-last-paste) (nth 1 evil-last-paste))
+      ;; if this was a visual paste, then mark the last paste as NOT
+      ;; being the first visual paste
+      (when (eq last-command 'evil-visual-paste)
+	(setcdr (nthcdr 4 evil-last-paste) nil)))
+    )
+
+
   ;; Fix `evil-search-next'
-  (defun noct-consult-line-evil-history (&rest _)
-    "Add latest `consult-line' search pattern to the evil search history ring.
-This only works with orderless and for the first component of the search. Source: https://github.com/minad/consult/issues/318#issuecomment-882067919"
-    (let ((pattern (nth 1 (orderless-compile (car consult--line-history)))))
-      (add-to-history 'regexp-search-ring pattern regexp-search-ring-max)
-      (setq evil-ex-search-pattern (list pattern t t))
-      (setq evil-ex-search-direction 'forward)
-      (when evil-ex-search-persistent-highlight
-        (evil-ex-search-activate-highlight evil-ex-search-pattern))))
-  (defun my-consult-line-evil-history (&rest _)
+  (defun consult-line-evil-history (&rest _)
     "Add latest `consult-line' search pattern to the evil search history ring."
     (when consult--line-history
                 (add-to-history
                  'regexp-search-ring ;; or search-ring
-                 (car consult--line-history)
+                 (nth 1 (orderless-compile (car consult--line-history)))
                  regexp-search-ring-max)))
-  (advice-add #'consult-line :after #'noct-consult-line-evil-history)
+  (advice-add #'consult-line :after #'consult-line-evil-history)
   (defun w/evil-search-next ()
     "Repeat the last search in the correct window (see `w/consult-line-window') with `evil-search-next'."
     (interactive)
@@ -595,6 +691,8 @@ This only works with orderless and for the first component of the search. Source
   ;; the mode gets enabled right away. Note that this forces loading the
   ;; package.
   (marginalia-mode))
+
+;; Sudo stuffs
 (defun init/add-find-file-sudo (&rest _)
   "Toggle '/sudo::' prefix of file name."
   (general-def :keymaps 'minibuffer-mode-map "M-s" (lambda ()
@@ -615,7 +713,33 @@ This only works with orderless and for the first component of the search. Source
 (advice-add 'read-file-name :before 'init/add-find-file-sudo)
 (advice-add 'read-file-name :after 'init/remove-find-file-sudo)
 
-;; Languages
+(use-package tramp
+  :general
+  (:keymaps 'override
+	    "C-c M-s" (make-cmd #'tramp-revert-buffer-with-sudo)))
+
+;; Language Support
+
+;; Text
+(define-minor-mode proselint-mode
+  "Toggle proselint checker of flycheck."
+  :global nil
+  :group 'flycheck
+  :lighter ""
+  (unless flycheck-mode (flycheck-mode))
+  (if proselint-mode (flycheck-select-checker 'proselint))
+  )
+(flycheck-define-checker proselint
+  "A linter for prose."
+  :command ("uvx" "proselint" "check" source-inplace)
+  :error-patterns
+  ((warning line-start (file-name) ":" line ":" column ": "
+            (id (one-or-more (not (any ":")))) ": "
+            (message) line-end))
+  :modes (org-mode
+	  text-mode))
+
+(add-to-list 'flycheck-checkers 'proselint)
 
 ;; Rust
 (use-package rust-mode
@@ -637,11 +761,16 @@ This only works with orderless and for the first component of the search. Source
                '(kdl . ("https://github.com/tree-sitter-grammars/tree-sitter-kdl"
                         "master" "src"))))
 ;; Typescript
-
 (add-to-list 'treesit-language-source-alist
                '(typescript . ("https://github.com/tree-sitter/tree-sitter-typescript"
                                "master" "typescript/src")))
 (add-to-list 'auto-mode-alist '("\\.ts\\'" . typescript-ts-mode))
+
+;; Lua
+(add-to-list 'treesit-language-source-alist
+               '(lua . ("https://github.com/tree-sitter-grammars/tree-sitter-lua"
+                        "main" "src")))
+(add-to-list 'auto-mode-alist '("\\.lua\\'" . lua-ts-mode))
 
 ;; Fish
 (use-package fish-mode
@@ -722,23 +851,28 @@ LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
     "=" 'eglot-format
     "h h" 'eldoc-doc-buffer
     )
-  (append
-   '(python-mode . ("uvx" "ty" "server"))
+  (add-to-list
+   'eglot-server-programs
+   '((python-mode python-ts-mode) . ("uvx" "ty@0.0.51" "server"))
+   )
+  (add-to-list
+   'eglot-server-programs
    '(rust-mode . ("rust-analyzer" :initializationOptions
 		  (:cargo (:buildScripts (:enable t))))) ; cargo.buildScripts.enable = true
-   'eglot-server-programs
    ))
 
 ;; Syntax & spell check
 (use-package flycheck
   :ensure t
+  :custom
+  (flycheck-auto-display-errors-after-checking nil)
   :config
-  (normal-def
-    :keymaps 'flycheck-mode-map
-    "<f8>" 'flycheck-next-error
-    "S-<f8>" 'flycheck-previous-error
-    )
-  :hook (prog-mode-hook . flycheck-mode))
+  (setq flycheck-display-errors-function nil)
+  :hook
+  (prog-mode . flycheck-mode)
+  )
+(require 'flycheck-inline)
+(global-flycheck-inline-mode)
 (use-package flycheck-eglot
   :ensure t
   :after (flycheck eglot)
@@ -750,10 +884,51 @@ LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
   (jinx-languages "en")
   ;; :hook
   ;; (emacs-startup . global-jinx-mode)
-  :general
-  (:keymaps 'override
-	    "M-$" 'jinx-correct
-            "C-M-$" 'jinx-languages))
+  :config
+  (defun jinx/correct-all-dwim (&optional _) (interactive)
+    (unwind-protect
+	(jinx-correct-all)
+      (jinx-mode -1)))
+  (leader-def
+    "j" 'jinx/correct-all-dwim) ;; Disable jinx anyway
+  (normal-def
+    :keymaps 'jinx-mode-map
+    "M-c" 'jinx-correct))
+(defun jinx-next-pos (&optional n)
+  "Return the position of Nth next misspelled word."
+  (when jinx-mode
+    (unless n (setq n 1))
+    (unless (= n 0)
+      (let ((ov (jinx--force-overlays (point-min) (point-max))))
+	(unless (or (> n 0) (<= (overlay-start (car ov)) (point) (overlay-end (car ov))))
+          (cl-incf n))
+	(overlay-end (nth (mod n (length ov)) ov)) ;; return
+	))))
+(defun next-pos-in (pos-fn &optional n)
+"Return the smallest position from the results of functions in POS-FN.
+POS-FN is a list of symbols of functions with N as argument that return
+a position or nil for unavailable.
+If no positions exist, return nil."
+(unless n
+  (setq n 1))
+(apply (if (> n 0)
+	   'min 'max)
+(cl-loop
+ for fn in pos-fn
+ for res = (funcall fn n)
+ if res collect res)))
+(defun next-error-dwim (&optional n)
+  (interactive)
+  (goto-char (next-pos-in '(jinx-next-pos flycheck-next-error-pos) n)))
+(defun prev-error-dwim (&optional n)
+  (interactive)
+  (if n
+      (next-error-dwim (- n))
+    (next-error-dwim -1)))
+(normal-def
+  :keymaps 'flycheck-mode-map
+  "<f11>" 'prev-error-dwim
+  "<f12>" 'next-error-dwim)
 
 ;; Elisp
 (add-hook 'emacs-lisp-mode-hook (lambda () (setq flycheck-emacs-lisp-load-path 'inherit)))
@@ -847,10 +1022,33 @@ LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
   (org-startup-indented t)
   (org-preview-latex-default-process 'dvipng)
   (org-time-stamp-custom-formats ("%m/%d/%y W%u" . "%m/%d/%y W%u %H:%M"))
-  ;; :hook
-  ((org-mode-hook . (lambda () (toggle-truncate-lines -1)))) ;; Don't truncate lines
-  ;; (org-mode-hook . (make-cmd #'toggle-truncate-lines -1)) ;; Don't truncate lines
+  (system-time-locale "en_US.UTF-8") ;; Display timestamp in the format like [2026-06-20 Sat 09:29]
+  (org-startup-truncated nil) ;; Don't truncate lines
+  (org-structure-template-alist '(("a" . "export ascii") ("c" . "center") ("C" . "COMMENT")
+				  ("e" . "EXAMPLE") ("E" . "export") ("h" . "export html")
+				  ("l" . "export latex") ("q" . "QUOTE") ("s" . "SRC") ("v" . "verse")))
+  :hook
+   (org-mode . (lambda () (display-line-numbers-mode -1)))
+   (org-mode . yas-minor-mode)
+
   :config
+  (defun org/meta-return-dwim (&optional arg)
+    "Insert a new heading or wrap a region in a table.
+Calls `org-insert-heading', `org-insert-item', 
+`org-table-wrap-region' or `org-insert-todo-heading', depending on context.  When called with
+an argument, unconditionally call `org-insert-heading'."
+    (interactive "P")
+    (or (run-hook-with-args-until-success 'org-metareturn-hook)
+	(call-interactively (cond (arg #'org-insert-heading)
+				  ((org-at-table-p) #'org-table-wrap-region)
+				  ((or (org-at-item-checkbox-p)
+				       (and (org-in-item-p)
+					    (save-excursion
+					      (previous-line)
+					      (org-at-item-checkbox-p)))) #'org-insert-todo-heading)
+				  ((org-in-item-p) #'org-insert-item)
+				  (t #'org-insert-heading)))))
+  
   (normal-def
     :keymaps 'org-mode-map
     "C-<left>" 'org-metaleft
@@ -863,13 +1061,25 @@ LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
     :keymaps 'org-mode-map
     :states 'insert
     "M--" (make-cmd #'yas-expand-snippet " -$0- ")
-    "M-/" (make-cmd #'yas-expand-snippet " /$0/ ")
+    "M-?" (make-cmd #'yas-expand-snippet " /$0/ ")
     "M-=" (make-cmd #'yas-expand-snippet " =$0= ")
     "M-*" (make-cmd #'yas-expand-snippet " *$0* ")
     "M-8" (make-cmd #'yas-expand-snippet " *$0* ")
-
-    "M-t" 'org-insert-todo-heading
+    "M-)" (make-cmd #'yas-expand-snippet "\\\\($0\\\\)")
+    "M-(" (make-cmd #'yas-expand-snippet "\\\\[\n$0\n\\\\]")
+    "M-i" 'org-insert-structure-template
+    "M-<return>" 'org/meta-return-dwim
+    "M-S-<return>" 'org-meta-return
     )
+  (general-def
+    :keymaps 'org-mode-map
+    :prefix "C-c"
+    "C-l" 'org-insert-link
+    )
+  (normal-def
+    :keymaps 'org-mode-map
+    "t" 'org-toggle-checkbox)
+
 
   (defun org/do-subtree (func &optional up)
     "Loop over the current subtree.
@@ -884,8 +1094,7 @@ hierarchy of headlines by UP levels before marking the subtree."
     (when up (while (and (> up 0) (org-up-heading-safe)) (cl-decf up)))
     (if (called-interactively-p 'any)
 	(call-interactively func)
-      (apply func nil)))
-  )
+      (apply func nil))))
 (use-package org-agenda
   :after org
   :custom
@@ -921,16 +1130,56 @@ hierarchy of headlines by UP levels before marking the subtree."
                    prop-pos))))
       (if pos (goto-char pos))
       (if backwards (goto-char (line-beginning-position)))))
+  (defun org/timestamp-smart (&optional arg)
+    (interactive)
+    (let (
+	  (old (point))
+	  (new (progn
+		 (org-timestamp nil nil)
+		 (point)))
+	  )
+      (unless (eq (char-before old) ? )
+	(goto-char old)
+	(insert ? ))
+      (goto-char new)
+      )
+    )
+  (defun org/clock-in-dwim (&optional arg)
+    "With a `\\[universal-argument]' prefix argument ARG, do as `org-clock-in' do in case of no `\\[universal-argument]'"
+    (interactive "P")
+    (cond
+     ((equal arg nil) ;; With no `\\[universal-argument]' prefix argument ARG
+      (org-clock-in)) 
+     ((equal arg '(4)) ;; With a `\\[universal-argument]' prefix argument ARG
+      (org-clock-in nil (org-read-date :inactive t)))
+     ))
+
   (general-def
     :keymaps 'org-agenda-mode-map
+    "z" nil
     "s" (lambda () (org-save-all-org-buffers) (org-agenda-redo-all))
     "J" 'org-agenda-next-header
     "K" 'org-agenda-previous-header
     "j" 'org-agenda-next-item
     "k" 'org-agenda-previous-item)
-  (normal-def
+  (general-def
+    :keymaps 'org-agenda-mode-map
+    :prefix "z"
+    "q" 'kill-unimportant-buffer-and-windows
+    "k" 'delete-window
+    "K" 'kill-buffer-and-window
+    "1" 'delete-other-windows
+    "2" 'split-window-below
+    "3" 'split-window-right
+    "z" 'w/smart-other-window
+
+    "o" 'other-window-prefix
+    "b" 'switch-to-buffer-other-window
+    "d" 'dired-other-window
+    "f" 'find-file-other-window)
+  (general-def
     :keymaps 'override
-    "M-<SPC>" (make-cmd #'org-agenda nil "c"))
+    "M-<SPC>" #'org-agenda)
   (normal-def
     :keymaps 'org-mode-map
     "M-t" 'org-todo
@@ -939,9 +1188,18 @@ hierarchy of headlines by UP levels before marking the subtree."
   (normal-def
     :infix "C-c"
     :keymaps 'org-mode-map
+    :states '(normal insert)
     "<up>" (defrepeater 'org-timestamp-up)
     "<down>" (defrepeater 'org-timestamp-down)
-    "e" 'org-export-dispatch)
+    "e" 'org-export-dispatch
+    "C-s" 'org-schedule
+    "C-d" 'org-deadline
+    "C-t" 'org/timestamp-smart
+    "C-o" 'org-clock-out
+    "C-i" 'org-clock-in
+    "C-q" 'org-clock-cancel
+    "i" 'org-clock-in-last
+    "o" 'org-clock-report)
   (defun org/skip-subtree-if-priority (priority)
     "Skip an agenda subtree if it has a priority of PRIORITY.
 
@@ -953,26 +1211,58 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
           (pri-current (org-get-priority (thing-at-point 'line t))))
       (if (= pri-value pri-current)
           subtree-end
-	nil))
+	nil)))
+  (defun org/skip-file (files)
+    (cl-loop
+     for file in files
+     if (file-equal-p (buffer-file-name) file)
+     return (point-max)))
+  (defvar long-term-file "~/org/agenda/long-term.org")
+  (defvar appointment-file "~/org/agenda/appointment.org")
+  (defvar task-file "~/org/agenda/task.org")
   (org-add-agenda-custom-command
-   '("c" "Simple agenda view"
-      ((tags "PRIORITY=\"A\""
-             ((org-agenda-skip-function '(org-agenda-skip-entry-if 'todo 'done))
-              (org-agenda-overriding-header "High-priority TODOs:")))
-       (agenda "")
-       (alltodo ""
-		;; Filter TODOs with a priority of `?A', a SCHEDULED or a DEADLINE
-		((org-agenda-skip-function
-		  '(or (org/skip-subtree-if-priority ?A)
-		       ;; `nil' means only the entry (i.e. the text before the next heading) is checked
-		       (org-agenda-skip-if nil '(scheduled deadline)))))
-		))))
+   '(" " "Task view"
+     ((tags "PRIORITY=\"A\""
+	    ((org-agenda-files `(,task-file))
+	     (org-agenda-skip-function
+		   '(org-agenda-skip-entry-if 'todo 'done))
+             (org-agenda-overriding-header "#A TODOs:")
+	     (org-agenda-prefix-format "  ")))
+      (agenda ""
+	    ((org-agenda-files `(,task-file))))
+      (alltodo ""
+	       ((org-agenda-files `(,task-file))
+		(org-agenda-skip-function 
+		 '(or 
+		   ;; Filter TODOs with a priority of `?A', a SCHEDULED or a DEADLINE
+		   (org/skip-subtree-if-priority ?A)
+		   ;; `nil' means only the entry (i.e. the text before the next heading) is checked
+		   (org-agenda-skip-if nil '(scheduled deadline))
+		   ))
+		(org-agenda-prefix-format " ")
+		)))))
+  (org-add-agenda-custom-command
+   '("l" "Long term agenda view"
+     (
+      (agenda* ""
+	       ((org-agenda-files `(,long-term-file))))
+      (alltodo ""
+	       ((org-agenda-files `(,long-term-file))
+		(org-agenda-prefix-format " ")
+		(org-agenda-sorting-strategy '(priority-down)))
+	       ))))
+  (setq org-clock-persist t
+	org-clock-idle-time 10) ;; minutes
+  (org-clock-persistence-insinuate)
   )
 (use-package org-roam
   :ensure t
   :after org
   :init
   (setq org-roam-v2-ack t) ;; Acknowledge V2 upgrade
+  (setq org-roam-directory org-directory)
+  (init/expand-and-create "dailies/" org-roam-directory)
+  (setq org-roam-dailies-directory "dailies/") ;; Relative path is required
   :config
   (org-roam-db-autosync-mode)
   (leader-def
@@ -984,14 +1274,15 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
     "l" 'org-roam-buffer-toggle
     ;; "a" 'org-roam-alias-add
     )
+  (general-def
+    :keymaps 'org-capture-mode-map
+    "C-c C-f" 'org-capture-finalize)
   :custom
-  (org-roam-directory (concat org-directory "roam/"))
-  (org-roam-dailies-directory "dailies/")
   (org-roam-capture-templates
 	'(("d" "default" plain "%?"
-           :target (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
+           :target (file+head "${slug}.org"
                               "#+title: ${title}
-#+STARTUP: latexpreview\n")
+")
            :unnarrowed t)
 
 	  ))
@@ -999,19 +1290,50 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
 (use-package xenops
   :ensure t
   :after org
-  :custom
-  (xenops-reveal-on-entry t)
   :hook
-  ((latex-mode org-mode-hook) . xenops-mode)
+  ((latex-mode org-mode) . xenops-mode)
   :config
+  ;; (add-hook 'org-mode-hook 'xenops-mode 100)
+  ;; (add-hook 'Latex-mode-hook 'xenops-mode 100)
+  (setq xenops-reveal-on-entry t)
+  (setq xenops-math-image-scale-factor 0.6)
+  (setq xenops-image-directory (init/expand-and-create "~/org/attachments/"))
+  ;; (advice-add 'xenops-dwim :before (lambda (&rest _)
+  ;; 				     (unless xenops-mode (xenops-mode))))
   (leader-def
     :keymap '(org-mode-map latex-mode-map)
-    "x" 'xenops-dwim))
+    "x" 'xenops-mode
+    "p" 'xenops-image-handle-paste)
+  (defun xenops-image-write-clipboard-image-to-file--wl-paste (temp-file)
+    "Handle paste event using wl-paste(Linux/Wayland)."
+
+    (when (executable-find "wl-paste")
+      (let ((exit-status
+             (call-process "wl-paste" nil `(:file ,temp-file) nil "-t" "image/png")))
+	(= exit-status 0))))
+  (if (getenv "WAYLAND_DISPLAY")
+      (advice-add 'xenops-image-write-clipboard-image-to-file--xclip
+		  :before-until 'xenops-image-write-clipboard-image-to-file--wl-paste))
+  ;; Try wl-paste first in case of Xwayland mess up xclip
+
+  (defun xenops-src-parse-at-point-a ()
+	      (if-let* ((element (xenops-parse-element-at-point 'src))
+			(org-babel-info
+			 (xenops-src-do-in-org-mode
+			  (org-babel-get-src-block-info 'light (org-element-context)))))
+		  (xenops-util-plist-update
+		   element
+		   :type 'src
+		   :language (nth 0 org-babel-info)
+		   :org-babel-info org-babel-info)))
+  (advice-add 'xenops-src-parse-at-point :override #'xenops-src-parse-at-point-a)
+  )
 (use-package org-appear
   :ensure t
   :after org
   :custom
   (org-hide-emphasis-markers t)
+  (org-appear-trigger 'always)
   :init
   ;; inline mark of Chinese 
   (defvar org-hide-space-keywords
@@ -1020,7 +1342,7 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
       ("[*/_=~+].*?\\cc[*/_=~+]\\( \\)\\cc"
        (0 (prog1 () (when org-hide-emphasis-markers (add-text-properties (match-beginning 1) (match-end 1) '(invisible t))))))))
   (font-lock-add-keywords 'org-mode org-hide-space-keywords 'append)
-  ;; hack `org-appear--show-invisible'
+  ;; hack `org-appear--show-invisible' to hide spaces wrapping the non-ASCLL characters.
   (defun o/org-appear--show-invisible (elem)
     "Silently remove invisible property from invisible parts of element ELEM."
     (let* ((elem-at-point (org-appear--parse-elem elem))
@@ -1060,24 +1382,23 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
 	       )))))
   (advice-add 'org-appear--show-invisible :override 'o/org-appear--show-invisible)
   ;; evil integration
-  (setq org-appear-trigger 'manual)
-  (add-hook 'org-mode-hook 'org-appear-mode)
-  (add-hook 'org-mode-hook (lambda ()
-                             (add-hook 'evil-insert-state-entry-hook
-                                       #'org-appear-manual-start
-                                       nil
-                                       t)
-                             (add-hook 'evil-insert-state-exit-hook
-                                       #'org-appear-manual-stop
-                                       nil
-                                       t)))
-
+  ;; (setq org-appear-trigger 'manual)
+  ;; (add-hook 'org-mode-hook 'org-appear-mode)
+  ;; (add-hook 'org-mode-hook (lambda ()
+  ;;                            (add-hook 'evil-insert-state-entry-hook
+  ;;                                      #'org-appear-manual-start
+  ;;                                      nil
+  ;;                                      t)
+  ;;                            (add-hook 'evil-insert-state-exit-hook
+  ;;                                      #'org-appear-manual-stop
+  ;;                                      nil
+  ;;                                      t)))
   )
 ;; Provides visual alignment for Org Mode, Markdown and table.el tables
 (use-package valign
   :ensure t
   :hook
-  (org-mode-hook . valign-mode))
+  ((markdown-mode org-mode) . valign-mode))
 
 ;; Shell & Terminal & Complication
 (use-package shell
@@ -1088,7 +1409,9 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
   :custom
   (compilation-auto-jump-to-first-error t)
   :general
-  ("C-c C-c" 'compile)
+  (:keymaps 'override
+	    :states 'normal
+   "SPC c" 'compile)
   (:keymaps 'compilation-mode-map
 	    "j" 'compilation-next-error
 	    "k" 'compilation-previous-error)
@@ -1119,11 +1442,10 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
 ;; IM
 (use-package sis
   :ensure t
-  ;; :hook
-  ;; enable the /context/ and /inline region/ mode for specific buffers
-  ;; (((text-mode prog-mode) . sis-context-mode)
+  :hook
+  enable the /context/ and /inline region/ mode for specific buffers
+  ((text-mode prog-mode) . sis-context-mode)
   ;;  ((text-mode prog-mode) . sis-inline-mode))
-
   :config
   (cond
    ((eq system-type 'gnu/linux)  (sis-ism-lazyman-config "1" "2" 'fcitx5))
@@ -1136,8 +1458,65 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
   ;; enable the /context/ mode for all buffers
   (sis-global-context-mode t)
   ;; enable the /inline english/ mode for all buffers
-  (sis-global-inline-mode t)
+  (sis-global-inline-mode nil)
   (setq sis-inline-with-english nil)
+  (add-to-list 'sis-respect-minibuffer-triggers
+               (cons 'gptel--suffix-send (lambda () 'other))
+	       )
+  )
+
+;; AI
+(defun process-to-string (programme &rest args)
+  "Call PROGRAMME with ARGS via `call-process', return `(exit-code . stdout)'."
+  (with-temp-buffer
+    `(
+     ,(apply #'call-process programme nil t nil args) ;; exit-code
+     .
+     ,(buffer-string)				      ;; stdout
+    )
+    ))
+(defun ai/get-key ()
+  (let* (
+	 (val (process-to-string "rbw" "get" "deepseek-api"))
+	 (code (car val))
+	 (key (cdr val))
+	 )
+	(if (eq code 0)
+	    key
+	  (error (concat "Failed to get api-key: " key)))))
+(use-package gptel
+  :ensure t
+  :custom
+  (evil-collection-gptel-want-ret-to-send nil)
+  (gptel-model 'deepseek-v4-flash)
+  (gptel-backend (gptel-make-openai "DS"
+		   :protocol "https"
+		   :host "api.deepseek.com"
+		   :endpoint "/chat/completions"
+		   :stream t
+		   :key #'ai/get-key
+		   :models '(deepseek-v4-flash deepseek-v4-pro)
+		   ))
+  (gptel-org-convert-response nil)
+  :general
+  (:keymaps 'override
+	    "C-c RET" 'gptel-menu
+	    "C-c C-a" 'gptel-abort
+	    "S-<return>" 'gptel-send
+	    )
+  :config
+  (gptel-make-preset 'default
+    :description nil :backend "DS" :model 'deepseek-v4-flash :system
+    'default :tools 'nil :stream t :temperature 1.0 :max-tokens nil
+    :use-context 'nil :track-media nil :include-reasoning t)
+  (gptel-make-preset 'quick
+    :description nil :backend "DS" :model 'deepseek-v4-flash :system
+    "Respond in one line if possible" :tools 'nil :stream t :temperature 1.0 :max-tokens nil
+    :use-context 'nil :track-media nil :include-reasoning nil)
+  (defun md->org-from-kill-ring (&optional arg)
+    (interactive)
+    (insert (gptel--convert-markdown->org (current-kill 0))))
+  (remove-hook 'gptel-post-response-functions 'pulse-momentary-highlight-region) ;; Disable the blink after response
   )
 
 ;; Dict
@@ -1152,8 +1531,7 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
     :keymaps 'quick-sdcv-mode-map
     "q" 'kill-buffer-and-window)
   (leader-def
-    "d" 'quick-sdcv-search-at-point
-    "h d" 'quick-sdcv-search-input))
+    "d" 'quick-sdcv-search-input))
 
 ;; Folding
 (use-package kirigami
@@ -1162,6 +1540,38 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
   (normal-def
     "\\" 'kirigami-toggle-fold
     "|" 'kirigami-close-folds))
+
+;; Leetcode
+(use-package leetcode
+  :ensure t
+  :hook
+  (leetcode--problem-detail . (lambda () (display-line-numbers-mode -1)))
+  :config
+  (init/expand-and-create "leetcode-env/"))
+
+;; Pdf
+(defvar pdf/scroll-offset 10)
+(defvar pdf/scroll-big-offset (* pdf/scroll-offset 5))
+
+(use-package pdf-tools
+  :ensure t
+  :custom
+  (pdf-info-epdfinfo-program (expand-file-name "pdf-tools/server/epdfinfo"))
+  :hook
+  ((pdf-view-mode . (lambda () (display-line-numbers-mode -1)))
+   (pdf-view-mode . (lambda () (centered-cursor-mode -1)))
+   )
+  :general
+  (:keymaps 'pdf-view-mode-map
+	    :states 'normal
+	    "j" (make-cmd #'pdf-view-next-line-or-next-page pdf/scroll-offset)
+	    "J" (make-cmd #'pdf-view-next-line-or-next-page pdf/scroll-big-offset)
+	    "k" (make-cmd #'pdf-view-previous-line-or-previous-page pdf/scroll-offset)
+	    "K" (make-cmd #'pdf-view-previous-line-or-previous-page pdf/scroll-big-offset)
+	    "M-[" #'pdf-view-previous-page
+	    "M-]" #'pdf-view-next-page)
+  :config
+  (pdf-tools-install))
 
 (provide 'init)
 ;;; init.el ends here
