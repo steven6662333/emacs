@@ -1,4 +1,5 @@
 *
 !init.el
 !**/.gitignore
-custom.el
+!lisp/
+!lisp/**
