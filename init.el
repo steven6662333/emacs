@@ -409,7 +409,7 @@ If the current buffer is not a minibuffer, kill its entire contents."
   "H" 'dired-up-directory
   "c" 'dired-do-copy
   "C" 'dired-do-compress-to
-  "T" 'dired-create-empty-file)
+  "a" 'dired-create-empty-file)
 (normal-def
   :keymaps 'ibuffer-mode-map
   "H" 'ibuffer-mark-forward)
@@ -868,8 +868,12 @@ LANG if `OUT-DIR/libtree-sitter-LANG.so' exsist."
   (flycheck-auto-display-errors-after-checking nil)
   :config
   (setq flycheck-display-errors-function nil)
-  :hook
-  (prog-mode . flycheck-mode)
+  (defvar flycheck-diabled-buffers '("*scratch*")
+    "`flycheck-mode' is diabled in this list of buffers.")
+  (add-hook 'prog-mode-hook (lambda () 
+			 (unless (cl-loop for buf-name in flycheck-diabled-buffers
+					  if (match-buffers buf-name) return t)
+			  (flycheck-mode))))
   )
 (require 'flycheck-inline)
 (global-flycheck-inline-mode)
@@ -932,6 +936,7 @@ If no positions exist, return nil."
 
 ;; Elisp
 (add-hook 'emacs-lisp-mode-hook (lambda () (setq flycheck-emacs-lisp-load-path 'inherit)))
+
 
 ;; Snippet
 (use-package yasnippet
@@ -1507,7 +1512,8 @@ The default “lowest priority” value is 67, and the ASCII value of “A” is
   :config
   (gptel-make-preset 'default
     :description nil :backend "DS" :model 'deepseek-v4-flash :system
-    'default :tools 'nil :stream t :temperature 1.0 :max-tokens nil
+    "Use the same format(markdown/emacs org) as user's requests to answer. Pay attension to indent and depth. Always use half-width punctuations if user isn't imply."
+    :tools 'nil :stream t :temperature 1.0 :max-tokens nil
     :use-context 'nil :track-media nil :include-reasoning t)
   (gptel-make-preset 'quick
     :description nil :backend "DS" :model 'deepseek-v4-flash :system
